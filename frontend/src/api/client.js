@@ -154,6 +154,58 @@ export function isAuthenticated() {
     return !!getSessionToken();
 }
 
+/**
+ * Request password reset email
+ */
+export async function requestPasswordReset(email) {
+    const response = await fetch(`${API_BASE}/auth/forgot-password`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+    });
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(error.detail || error.error || 'Request failed');
+    }
+
+    return response.json();
+}
+
+/**
+ * Reset password using recovery token
+ */
+export async function resetPassword(accessToken, newPassword) {
+    const response = await fetch(`${API_BASE}/auth/reset-password`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            access_token: accessToken,
+            new_password: newPassword
+        }),
+    });
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Reset failed' }));
+        throw new Error(error.detail || error.error || 'Password reset failed');
+    }
+
+    return response.json();
+}
+
+/**
+ * Get the Google OAuth URL for sign-in
+ */
+export function getGoogleAuthUrl() {
+    const supabaseUrl = 'https://zxmyoojcuihavbhiblwc.supabase.co';
+    const redirectUri = `${window.location.origin}/auth/callback`;
+    return `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirectUri)}&skip_http_redirect=true`;
+}
+
 // =============================================================================
 // QURAN API FUNCTIONS
 // =============================================================================

@@ -363,6 +363,314 @@ async def get_current_user_endpoint(current_user: dict = Depends(get_current_use
     return {"user": current_user}
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    access_token: str
+    new_password: str
+
+
+@app.post("/api/auth/forgot-password")
+async def forgot_password(data: ForgotPasswordRequest):
+    """Send password reset email via Supabase."""
+    try:
+        # Use Supabase's built-in password reset
+        # The redirect URL is where users land after clicking the email link
+        supabase.auth.reset_password_for_email(
+            data.email,
+            options={
+                "redirect_to": "https://quran.hyperflash.uk/reset-password"
+            }
+        )
+        # Always return success to prevent email enumeration
+        return {"success": True, "message": "If an account exists with this email, a reset link has been sent."}
+    except Exception as e:
+        # Log error but don't expose details to client
+        print(f"Password reset error: {e}")
+        return {"success": True, "message": "If an account exists with this email, a reset link has been sent."}
+
+
+@app.post("/api/auth/reset-password")
+async def reset_password(data: ResetPasswordRequest):
+    """Update password using recovery access token from email link."""
+    try:
+        # Create a new client authenticated with the recovery token
+        # This allows us to update the user's password
+        from supabase import create_client
+        
+        # Create authenticated client with the access token
+        auth_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        
+        # Set the session with the access token from the recovery email
+        auth_client.auth.set_session(data.access_token, data.access_token)
+        
+        # Update the user's password
+        response = auth_client.auth.update_user({
+            "password": data.new_password
+        })
+        
+        if response.user:
+            return {"success": True, "message": "Password has been reset successfully."}
+        else:
+            raise HTTPException(status_code=400, detail="Failed to reset password")
+    except Exception as e:
+        print(f"Password reset error: {e}")
+        raise HTTPException(status_code=400, detail="Failed to reset password. The link may have expired.")
+
+
+class OAuthCallbackRequest(BaseModel):
+    provider: str
+    access_token: str
+    refresh_token: Optional[str] = None
+
+
+@app.post("/api/auth/oauth/callback")
+async def oauth_callback(data: OAuthCallbackRequest):
+    """
+    Exchange OAuth tokens for a Supabase session.
+
+    Handles account merging:
+    - If user's email already exists from a previous email/password registration,
+      the Google OAuth identity is linked to the existing account.
+    - All existing data (bookmarks, progress, etc.) is preserved.
+    """
+    try:
+        if data.provider != "google":
+            raise HTTPException(status_code=400, detail="Unsupported provider")
+
+        # Create a new Supabase client and set session with OAuth tokens
+        from supabase import create_client
+        auth_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+        # Set the session using the OAuth tokens
+        auth_client.auth.set_session(data.access_token, data.refresh_token)
+
+        # Get the user to verify the session is valid
+        user_response = auth_client.auth.get_user()
+        if not user_response or not user_response.user:
+            raise HTTPException(status_code=401, detail="Invalid OAuth tokens")
+
+        oauth_user_id = user_response.user.id
+        oauth_email = user_response.user.email
+
+        # Check if there's an existing profile with this email (from email/password registration)
+        existing_profile = supabase.table("profiles").select("*").eq("email", oauth_email).execute()
+
+        # Get or create profile for the OAuth user
+        oauth_profile = supabase.table("profiles").select("*").eq("id", oauth_user_id).execute()
+
+        user_name = ""
+        user_email = oauth_email
+
+        # Handle account merging scenario
+        if existing_profile.data and len(existing_profile.data) > 0:
+            existing = existing_profile.data[0]
+            existing_user_id = existing["id"]
+
+            # If different user IDs, we have a duplicate - merge the accounts
+            if existing_user_id != oauth_user_id:
+                print(f"Account merge needed: existing={existing_user_id}, oauth={oauth_user_id}, email={oauth_email}")
+
+                # Check if OAuth profile already exists (might be created by Supabase)
+                if oauth_profile.data and len(oauth_profile.data) > 0:
+                    # OAuth profile exists, migrate data from old profile to new one
+                    await _migrate_account_data(existing_user_id, oauth_user_id)
+
+                    # Update OAuth profile with existing data (preserve name, etc.)
+                    supabase.table("profiles").update({
+                        "name": existing.get("name", ""),
+                        "updated_at": datetime.now().isoformat()
+                    }).eq("id", oauth_user_id).execute()
+
+                    user_name = existing.get("name", "")
+                    user_email = existing.get("email", oauth_email)
+
+                    # Optionally delete or mark old profile as merged
+                    # For now, we'll keep it but could add a 'merged_to' field
+                    print(f"Account merged: {existing_user_id} -> {oauth_user_id}")
+                else:
+                    # OAuth profile doesn't exist, create it with existing data
+                    new_profile = {
+                        "id": oauth_user_id,
+                        "email": oauth_email,
+                        "name": existing.get("name", ""),
+                        "created_at": datetime.now().isoformat()
+                    }
+                    supabase.table("profiles").insert(new_profile).execute()
+
+                    # Migrate data from old account to new OAuth account
+                    await _migrate_account_data(existing_user_id, oauth_user_id)
+
+                    user_name = existing.get("name", "")
+                    user_email = oauth_email
+
+                    print(f"Account migrated and merged: {existing_user_id} -> {oauth_user_id}")
+            else:
+                # Same user ID, no merge needed
+                user_name = existing.get("name", "")
+                user_email = existing.get("email", oauth_email)
+
+        elif oauth_profile.data and len(oauth_profile.data) > 0:
+            # OAuth profile exists, no duplicate
+            user_name = oauth_profile.data[0].get("name", "")
+            user_email = oauth_profile.data[0].get("email", oauth_email)
+        else:
+            # No profile exists yet, create one
+            new_profile = {
+                "id": oauth_user_id,
+                "email": oauth_email,
+                "name": user_response.user.user_metadata.get("name", "") or user_response.user.user_metadata.get("full_name", ""),
+                "created_at": datetime.now().isoformat()
+            }
+            supabase.table("profiles").insert(new_profile).execute()
+            user_name = new_profile["name"]
+
+        return {
+            "user": {
+                "id": oauth_user_id,
+                "name": user_name,
+                "email": user_email
+            },
+            "session": {
+                "access_token": data.access_token,
+                "refresh_token": data.refresh_token
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"OAuth callback error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=401, detail="OAuth authentication failed")
+
+
+async def _migrate_account_data(from_user_id: str, to_user_id: str):
+    """
+    Migrate all user data from one account to another during account merge.
+
+    Tables to migrate:
+    - bookmarks
+    - reading_progress
+    - daily_readings
+    - completed_ayahs
+    - play_sessions
+    - replay_stats
+    - quran_play_sessions
+    """
+    # Migrate bookmarks
+    existing_bookmarks = supabase.table("bookmarks").select("*").eq("user_id", from_user_id).execute()
+    if existing_bookmarks.data:
+        for bm in existing_bookmarks.data:
+            try:
+                supabase.table("bookmarks").insert({
+                    "user_id": to_user_id,
+                    "ayah_id": bm["ayah_id"],
+                    "surah_id": bm["surah_id"],
+                    "ayah_number_in_surah": bm["ayah_number_in_surah"],
+                    "created_at": bm["created_at"]
+                }).execute()
+            except Exception:
+                pass  # Duplicate bookmarks are ok
+
+    # Migrate reading_progress
+    existing_progress = supabase.table("reading_progress").select("*").eq("user_id", from_user_id).execute()
+    if existing_progress.data:
+        for p in existing_progress.data:
+            try:
+                supabase.table("reading_progress").insert({
+                    "user_id": to_user_id,
+                    "surah_id": p["surah_id"],
+                    "last_read_ayah_id": p["last_read_ayah_id"],
+                    "last_read_ayah_number": p["last_read_ayah_number"],
+                    "total_ayahs_read": p["total_ayahs_read"],
+                    "last_read_date": p["last_read_date"],
+                    "created_at": p.get("created_at"),
+                    "updated_at": p["updated_at"]
+                }).execute()
+            except Exception:
+                pass
+
+    # Migrate daily_readings
+    existing_daily = supabase.table("daily_readings").select("*").eq("user_id", from_user_id).execute()
+    if existing_daily.data:
+        for d in existing_daily.data:
+            try:
+                supabase.table("daily_readings").insert({
+                    "user_id": to_user_id,
+                    "read_date": d["read_date"],
+                    "ayahs_read": d["ayahs_read"]
+                }).execute()
+            except Exception:
+                pass
+
+    # Migrate completed_ayahs
+    existing_completed = supabase.table("completed_ayahs").select("*").eq("user_id", from_user_id).execute()
+    if existing_completed.data:
+        for c in existing_completed.data:
+            try:
+                supabase.table("completed_ayahs").insert({
+                    "user_id": to_user_id,
+                    "ayah_id": c["ayah_id"],
+                    "surah_id": c["surah_id"],
+                    "ayah_number": c["ayah_number"],
+                    "is_sequential": c.get("is_sequential", False),
+                    "completed_at": c["completed_at"]
+                }).execute()
+            except Exception:
+                pass
+
+    # Migrate play_sessions
+    existing_sessions = supabase.table("play_sessions").select("*").eq("user_id", from_user_id).execute()
+    if existing_sessions.data:
+        for s in existing_sessions.data:
+            try:
+                supabase.table("play_sessions").insert({
+                    "user_id": to_user_id,
+                    "ayah_id": s["ayah_id"],
+                    "surah_id": s["surah_id"],
+                    "ayah_number": s["ayah_number"],
+                    "audio_edition": s.get("audio_edition", "ar.alafasy"),
+                    "created_at": s["created_at"],
+                    "completed_at": s.get("completed_at"),
+                    "duration_seconds": s.get("duration_seconds")
+                }).execute()
+            except Exception:
+                pass
+
+    # Migrate replay_stats
+    existing_replay = supabase.table("replay_stats").select("*").eq("user_id", from_user_id).execute()
+    if existing_replay.data:
+        for r in existing_replay.data:
+            try:
+                supabase.table("replay_stats").insert({
+                    "user_id": to_user_id,
+                    "ayah_id": r["ayah_id"],
+                    "play_count": r["play_count"],
+                    "total_duration_seconds": r["total_duration_seconds"],
+                    "last_played_at": r["last_played_at"]
+                }).execute()
+            except Exception:
+                pass
+
+    # Migrate quran_play_sessions
+    existing_quran_sessions = supabase.table("quran_play_sessions").select("*").eq("user_id", from_user_id).execute()
+    if existing_quran_sessions.data:
+        for qs in existing_quran_sessions.data:
+            try:
+                supabase.table("quran_play_sessions").insert({
+                    "user_id": to_user_id,
+                    "start_surah_id": qs["start_surah_id"],
+                    "start_ayah_number": qs["start_ayah_number"],
+                    "created_at": qs["created_at"],
+                    "ended_at": qs.get("ended_at")
+                }).execute()
+            except Exception:
+                pass
+
+
 # =============================================================================
 # BOOKMARKS ENDPOINTS (Supabase + SQLite)
 # =============================================================================

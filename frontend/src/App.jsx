@@ -3,6 +3,9 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
+import AuthCallback from './pages/AuthCallback'
 import Home from './pages/Home'
 import Account from './pages/Account'
 import Progress from './pages/Progress'
@@ -81,6 +84,21 @@ function AppRoutes() {
                     </PublicRoute>
                 }
             />
+            <Route
+                path="/forgot-password"
+                element={
+                    <PublicRoute>
+                        <ForgotPassword />
+                    </PublicRoute>
+                }
+            />
+            <Route
+                path="/reset-password"
+                element={
+                    <ResetPassword />
+                }
+            />
+            <Route path="/auth/callback" element={<AuthCallback />} />
 
             {/* Public routes - no authentication required */}
             <Route element={<Layout />}>
