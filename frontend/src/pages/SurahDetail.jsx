@@ -179,13 +179,17 @@ function SurahDetail() {
         }
     }, [volume]);
 
-    // Smooth scroll to playing ayah
+    // Smooth scroll to playing ayah with a slight delay for buttery feel
     useEffect(() => {
         if (playingAyah !== null && ayahRefs.current[playingAyah]) {
-            ayahRefs.current[playingAyah].scrollIntoView({
-                behavior: 'smooth',
-                block: 'center',
-            });
+            // Use a small delay to allow the card animation to start
+            const timeoutId = setTimeout(() => {
+                ayahRefs.current[playingAyah].scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center',
+                });
+            }, 100);
+            return () => clearTimeout(timeoutId);
         }
     }, [playingAyah]);
 
@@ -207,16 +211,23 @@ function SurahDetail() {
                     return;
                 }
 
-                // Continue to next ayah (either autoPlay or normal continuation)
+                // Continue to next ayah if autoPlay is enabled
                 const nextAyah = playingAyah + 1;
                 if (nextAyah < ayahs.length) {
-                    playAyah(nextAyah);
+                    if (autoPlay) {
+                        playAyah(nextAyah);
+                    } else {
+                        // Keep current ayah as the last played, but stop active playback
+                        setPlayingAyah(null);
+                    }
                 } else {
                     // End of surah reached
                     setPlayingAyah(null);
+                    setAutoPlay(false);
                 }
             } else {
                 setPlayingAyah(null);
+                setAutoPlay(false);
             }
         };
 
