@@ -882,6 +882,34 @@ def get_overall_completion_stats(current_user: dict = Depends(get_current_user))
 # SHARE IMAGE ENDPOINTS
 # =============================================================================
 
+@app.get("/api/share/og")
+def get_og_image(
+    format: str = Query("png", description="Image format (png or jpeg)")
+):
+    """
+    Generate an Open Graph image for the homepage.
+
+    Returns a beautiful promotional image for sharing the Quran Reader app on social media.
+    Standard OG dimensions: 1200x630
+    """
+    from share_image import generate_og_image_bytes
+
+    image_format = format.upper() if format.lower() in ["png", "jpeg", "jpg"] else "PNG"
+    image_bytes = generate_og_image_bytes(format=image_format)
+
+    media_type = "image/jpeg" if image_format == "JPEG" else "image/png"
+    filename = f"quran-reader-og.{format.lower()}"
+
+    return Response(
+        content=image_bytes,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"',
+            "Cache-Control": "public, max-age=86400",  # Cache for 24 hours
+        }
+    )
+
+
 @app.get("/api/share/ayah/{surah_id}/{ayah_number}")
 def get_ayah_share_image(
     surah_id: int,

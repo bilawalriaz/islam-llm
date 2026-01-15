@@ -570,7 +570,7 @@ def generate_ayah_image_bytes(
     format="png"
 ):
     """Generate the image and return it as bytes.
-    
+
     Args:
         portrait: If True, generate 9:16 portrait for mobile stories (WhatsApp, Snapchat, etc.)
         style: 'classic' or 'nature'
@@ -589,16 +589,147 @@ def generate_ayah_image_bytes(
         portrait=portrait,
         style=style
     )
-    
+
     buffer = BytesIO()
-    
+
     if format.lower() == "jpg" or format.lower() == "jpeg":
         rgb_img = Image.new('RGB', img.size, (255, 247, 237))  # Light orange background
         rgb_img.paste(img, mask=img.split()[3])
         rgb_img.save(buffer, format='JPEG', quality=95)
     else:
         img.save(buffer, format='PNG', optimize=True)
-    
+
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def generate_og_image_bytes(format="png"):
+    """Generate an Open Graph image for the homepage.
+
+    Creates a beautiful promotional image for sharing the Quran Reader app.
+    """
+    # OG image dimensions (1200x630 is standard for Open Graph)
+    width = 1200
+    height = 630
+
+    # Color RGB values
+    text_primary_rgb = hex_to_rgb(COLORS['text_primary'])
+    text_secondary_rgb = hex_to_rgb(COLORS['text_secondary'])
+
+    # Create the image
+    img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    # Draw gradient background (warm orange gradient from top to bottom)
+    gradient_start_rgb = hex_to_rgb(COLORS['gradient_start'])
+    gradient_end_rgb = hex_to_rgb(COLORS['gradient_end'])
+
+    for y in range(height):
+        ratio = y / height
+        r = int(gradient_start_rgb[0] + (gradient_end_rgb[0] - gradient_start_rgb[0]) * ratio)
+        g = int(gradient_start_rgb[1] + (gradient_end_rgb[1] - gradient_start_rgb[1]) * ratio)
+        b = int(gradient_start_rgb[2] + (gradient_end_rgb[2] - gradient_start_rgb[2]) * ratio)
+        draw.line([(0, y), (width, y)], fill=(r, g, b, 255))
+
+    # Draw Arabic "Quran Reader" text
+    arabic_font = get_arabic_font(72)
+    arabic_text = "القرآن الكريم"
+    arabic_bbox = draw.textbbox((0, 0), arabic_text, font=arabic_font)
+    arabic_width = arabic_bbox[2] - arabic_bbox[0]
+    arabic_x = (width - arabic_width) // 2
+
+    # Draw decorative divider above Arabic
+    accent_rgb = hex_to_rgb(COLORS['accent'])
+    draw.line(
+        [(400, 160), (800, 160)],
+        fill=(*accent_rgb, 255),
+        width=3
+    )
+
+    # Draw Arabic text
+    draw.text(
+        (arabic_x, 190),
+        arabic_text,
+        fill=text_primary_rgb,
+        font=arabic_font
+    )
+
+    # Draw English title
+    title_font = get_font(56)
+    title_text = "Quran Reader"
+    title_bbox = draw.textbbox((0, 0), title_text, font=title_font)
+    title_width = title_bbox[2] - title_bbox[0]
+    title_x = (width - title_width) // 2
+
+    draw.text(
+        (title_x, 300),
+        title_text,
+        fill=text_primary_rgb,
+        font=title_font
+    )
+
+    # Draw subtitle
+    subtitle_font = get_font(32)
+    subtitle_text = "Read and Listen to the Holy Quran"
+    subtitle_bbox = draw.textbbox((0, 0), subtitle_text, font=subtitle_font)
+    subtitle_width = subtitle_bbox[2] - subtitle_bbox[0]
+    subtitle_x = (width - subtitle_width) // 2
+
+    draw.text(
+        (subtitle_x, 370),
+        subtitle_text,
+        fill=text_secondary_rgb,
+        font=subtitle_font
+    )
+
+    # Draw features
+    features_font = get_font(24)
+    features = [
+        "• 114 Surahs",
+        "• Multiple Translations",
+        "• Audio Recitations",
+        "• Progress Tracking"
+    ]
+
+    # Center features horizontally
+    feature_y = 440
+    for feature in features:
+        feature_bbox = draw.textbbox((0, 0), feature, font=features_font)
+        feature_width = feature_bbox[2] - feature_bbox[0]
+        feature_x = (width - feature_width) // 2
+        draw.text(
+            (feature_x, feature_y),
+            feature,
+            fill=text_secondary_rgb,
+            font=features_font
+        )
+        feature_y += 32
+
+    # Draw footer branding
+    footer_y = height - 50
+    footer_font = get_font(20)
+    footer_text = "quran.hyperflash.uk"
+    footer_bbox = draw.textbbox((0, 0), footer_text, font=footer_font)
+    footer_width = footer_bbox[2] - footer_bbox[0]
+    footer_x = (width - footer_width) // 2
+
+    draw.text(
+        (footer_x, footer_y),
+        footer_text,
+        fill=(*hex_to_rgb(COLORS['accent']), 200),
+        font=footer_font
+    )
+
+    # Save to buffer
+    buffer = BytesIO()
+
+    if format.lower() == "jpg" or format.lower() == "jpeg":
+        rgb_img = Image.new('RGB', img.size, (255, 247, 237))
+        rgb_img.paste(img, mask=img.split()[3])
+        rgb_img.save(buffer, format='JPEG', quality=95)
+    else:
+        img.save(buffer, format='PNG', optimize=True)
+
     buffer.seek(0)
     return buffer.getvalue()
 

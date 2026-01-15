@@ -1254,6 +1254,12 @@ code {
     color: white;
 }
 
+.btn-icon.active {
+    background: var(--gradient-accent);
+    border-color: transparent;
+    color: white;
+}
+
 @keyframes pulse {
 
     0%,
