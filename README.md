@@ -83,6 +83,9 @@ The frontend will run on:
 
 ## Access URLs
 
+### Production (Cloudflare Tunnel)
+- Frontend: `https://quran.hyperflash.uk`
+
 ### Local Access
 - Frontend: `http://localhost:5173`
 - Backend API: `http://localhost:8001`

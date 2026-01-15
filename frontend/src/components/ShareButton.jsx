@@ -22,8 +22,9 @@ function ShareButton({
     const [imageStyle, setImageStyle] = useState('nature'); // Default to nature for now since user is testing it
     const modalRef = useRef(null);
 
-    // Get base URL for sharing
-    const baseUrl = window.location.origin;
+    // Get base URL for sharing - use production URL if set, otherwise use current origin
+    const productionUrl = import.meta.env.VITE_PUBLIC_URL || 'https://quran.hyperflash.uk';
+    const baseUrl = productionUrl || window.location.origin;
     const ayahUrl = `${baseUrl}/quran/${surahId}#ayah-${ayahNumber}`;
 
     // Generate image URL when modal opens or format changes

@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { LoadingState, EmptyState } from '../components/Spinner';
 import Button from '../components/Button';
 import ShareButton from '../components/ShareButton';
+import Modal from '../components/Modal';
 
 /**
  * Reciter name mapping - converts identifiers to human-readable names
@@ -86,6 +87,7 @@ function SurahDetail() {
     const [playingAyah, setPlayingAyah] = useState(null);
     const [autoPlay, setAutoPlay] = useState(false);
     const [loopAyah, setLoopAyah] = useState(false);
+    const [showSurahCompletion, setShowSurahCompletion] = useState(false);
 
     // Bookmark state - map of ayah_id -> bookmark_id (or null if not bookmarked)
     const [bookmarks, setBookmarks] = useState({});
@@ -120,6 +122,8 @@ function SurahDetail() {
     useEffect(() => {
         loadSurahData();
         loadEditions();
+        // Scroll to top when surah changes
+        window.scrollTo({ top: 0, behavior: 'instant' });
     }, [id]);
 
     useEffect(() => {
@@ -179,10 +183,9 @@ function SurahDetail() {
         }
     }, [volume]);
 
-    // Smooth scroll to playing ayah immediately for zero-latency feel
+    // Smooth scroll to playing ayah
     useEffect(() => {
         if (playingAyah !== null && ayahRefs.current[playingAyah]) {
-            // Use requestAnimationFrame to ensure we scroll in the correct frame cycle
             requestAnimationFrame(() => {
                 ayahRefs.current[playingAyah]?.scrollIntoView({
                     behavior: 'smooth',
@@ -220,9 +223,10 @@ function SurahDetail() {
                         setPlayingAyah(null);
                     }
                 } else {
-                    // End of surah reached
+                    // End of surah reached - show completion modal
                     setPlayingAyah(null);
                     setAutoPlay(false);
+                    setShowSurahCompletion(true);
                 }
             } else {
                 setPlayingAyah(null);
@@ -447,9 +451,12 @@ function SurahDetail() {
                 preloadedAudioRefs.current[nextIndex] = preloadedAudio;
 
                 // Trigger load to cache the audio
-                preloadedAudio.load().catch(() => {
+                // Note: Audio.load() doesn't return a Promise, wrap in try-catch
+                try {
+                    preloadedAudio.load();
+                } catch {
                     // Silently fail if preloading fails - playback will still work
-                });
+                }
             }
         }
     };
@@ -956,7 +963,7 @@ function SurahDetail() {
                                 disabled={playingAyah !== null && playingAyah === ayahs.length - 1}
                             >
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                    <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
                                 </svg>
                             </button>
 
@@ -1057,6 +1064,51 @@ function SurahDetail() {
                     </Button>
                 </div>
             </div>
+
+            {/* Surah Completion Modal */}
+            <Modal
+                isOpen={showSurahCompletion}
+                onClose={() => setShowSurahCompletion(false)}
+                title="Alhamdulillah! Surah Complete"
+                size="small"
+                footer={
+                    <div className="d-flex gap-2">
+                        <Button
+                            variant="secondary"
+                            onClick={() => {
+                                setShowSurahCompletion(false);
+                                playAyah(0); // Replay from beginning
+                                setAutoPlay(true);
+                            }}
+                        >
+                            Replay Surah
+                        </Button>
+                        {surah.id && surah.id < 114 && (
+                            <Button
+                                variant="primary"
+                                onClick={() => {
+                                    setShowSurahCompletion(false);
+                                    navigate(`/quran/${surah.id + 1}`);
+                                }}
+                            >
+                                Next Surah &rarr;
+                            </Button>
+                        )}
+                    </div>
+                }
+            >
+                <div className="surah-completion-content">
+                    <p className="surah-completion-message">
+                        You have completed <strong>{surah?.english_name}</strong> ({surah?.name}).
+                    </p>
+                    <p className="surah-completion-subtitle">
+                        {surah?.id === 114
+                            ? "You have completed the final Surah of the Quran!"
+                            : `Continue to Surah ${surah?.id + 1} or replay this surah?`
+                        }
+                    </p>
+                </div>
+            </Modal>
         </>
     );
 }

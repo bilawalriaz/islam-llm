@@ -4,10 +4,21 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  // Listen on all interfaces for Tailscale access
+  // Base path for production deployment (served from root)
+  base: '/',
+  // Listen on all interfaces for Tailscale/CF tunnel access
   server: {
     host: '0.0.0.0',
     port: 5173,
+    // Allow HMR via Cloudflare tunnel
+    allowedHosts: [
+      'quran.hyperflash.uk',
+      '.hyperflash.uk',  // Wildcard for subdomains
+      'localhost',
+      '.local',
+    ],
+    // Strict host checking - only allow listed hosts
+    strictPort: false,
     proxy: {
       '/api': {
         target: 'http://localhost:8001',

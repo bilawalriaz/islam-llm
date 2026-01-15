@@ -19,7 +19,7 @@ import secrets
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from share_image import generate_ayah_image_bytes
+from share_image import generate_ayah_image_bytes, preload_backgrounds
 
 # Database path
 DB_PATH = Path(__file__).parent.parent / "quran-dump" / "quran.db"
@@ -28,7 +28,14 @@ TOKEN_EXPIRY_DAYS = 30
 
 app = FastAPI(title="Quran Reader API")
 
-# CORS middleware - allows localhost and Tailscale access
+
+@app.on_event("startup")
+def startup_event():
+    """Preload background images on startup for fast first generation."""
+    preload_backgrounds()
+
+
+# CORS middleware - allows localhost, Tailscale, and production domain
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -37,6 +44,8 @@ app.add_middleware(
         "http://100.115.245.7:5173",
         "http://100.115.245.7:3000",
         "http://100.115.245.7:8001",  # Tailscale backend direct
+        "https://quran.hyperflash.uk",  # Production CF tunnel
+        "http://quran.hyperflash.uk",   # Development/testing
     ],
     allow_credentials=True,
     allow_methods=["*"],

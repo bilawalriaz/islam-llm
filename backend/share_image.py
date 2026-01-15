@@ -5,7 +5,7 @@ Creates beautiful, artistic shareable images for Quran ayahs.
 Features rounded card design with warm orange gradient and elegant typography.
 """
 
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance, ImageChops
 from io import BytesIO
 import math
 import os
@@ -37,20 +37,21 @@ NATURE_QUERIES = [
     'nature', 'mountain', 'stars', 'galaxy', 'ocean', 'forest', 'desert', 'night'
 ]
 
-# Card dimensions (content area) - HIGH RES
-CARD_WIDTH = 1600
-CARD_HEIGHT = 900
-SQUARE_CARD_SIZE = 1440
-PORTRAIT_WIDTH = 1080  # 9:16 for mobile stories
-PORTRAIT_HEIGHT = 1920
+# Card dimensions (content area) - ULTRA HIGH RES for sharp text
+CARD_WIDTH = 2400
+CARD_HEIGHT = 1350
+SQUARE_CARD_SIZE = 2160
+PORTRAIT_WIDTH = 1620  # 9:16 for mobile stories
+PORTRAIT_HEIGHT = 2880
 
-# Shadow and padding settings
-SHADOW_EXPAND = 100
-SHADOW_BLUR = 50
-SHADOW_OPACITY = 60
-SHADOW_OFFSET_Y = 20
+# Shadow and padding settings - scaled for higher resolution
+# macOS-style: softer, more diffuse, lower opacity
+SHADOW_EXPAND = 200
+SHADOW_BLUR = 100
+SHADOW_OPACITY = 40  # Lower opacity for softer look
+SHADOW_OFFSET_Y = 20  # Minimal offset
 SHADOW_OFFSET_X = 0
-CORNER_RADIUS = 48
+CORNER_RADIUS = 72
 
 
 def hex_to_rgb(hex_color):
@@ -125,57 +126,167 @@ def create_rounded_rectangle_mask(size, radius):
 
 
 def create_shadow(width, height, radius=20, blur=30, opacity=100, offset_x=0, offset_y=10):
-    """Create a blurred shadow for the card."""
-    expand = blur * 2
+    """Create a macOS-style blurred shadow for the card.
+
+    macOS shadows are:
+    - Very soft and diffuse
+    - Lower opacity (~30%)
+    - Larger blur radius
+    - Minimal offset
+    """
+    # macOS style: larger expand for the diffuse glow effect
+    expand = blur * 3
     shadow_width = width + expand * 2
     shadow_height = height + expand * 2
-    
+
     shadow = Image.new('RGBA', (shadow_width, shadow_height), (0, 0, 0, 0))
     shadow_draw = ImageDraw.Draw(shadow)
-    
+
     shadow_draw.rounded_rectangle(
-        [(expand + offset_x, expand + offset_y), 
+        [(expand + offset_x, expand + offset_y),
          (expand + width - 1 + offset_x, expand + height - 1 + offset_y)],
         radius=radius,
         fill=(0, 0, 0, opacity)
     )
-    
+
+    # Apply Gaussian blur for the soft effect
     shadow = shadow.filter(ImageFilter.GaussianBlur(radius=blur))
-    
+
     return shadow
 
 
 def get_unsplash_image(width, height, query="nature"):
-    """Fetch a random image from Unsplash."""
+    """Fetch a random image from Unsplash with caching."""
+    # Cache directory
+    cache_dir = Path(__file__).parent / 'bg_cache'
+    cache_dir.mkdir(exist_ok=True)
+
+    # Curated list of 50 high-quality nature images
+    nature_images = _NATURE_IMAGES
+
+    img_url = random.choice(nature_images)
+    # Extract image ID from URL for caching (photo-{id})
+    img_id = img_url.split('/')[-1].split('?')[0]
+    cache_path = cache_dir / f"{img_id}.png"
+
+    # Check cache first (fast path - no network)
+    if cache_path.exists():
+        try:
+            return Image.open(cache_path).convert('RGBA').resize((width, height), Image.LANCZOS)
+        except:
+            pass
+
+    # Fetch and cache (only if not cached)
     try:
-        url = f"https://source.unsplash.com/featured/{width}x{height}/?{query}"
-        # source.unsplash.com is being deprecated, using images.unsplash.com with random query
-        # Actually, let's use a curated list of high-quality nature images for stability
-        nature_images = [
-            "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1600&q=80", # mountains
-            "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=1600&q=80", # forest
-            "https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&w=1600&q=80", # hills
-            "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1600&q=80", # forest sun
-            "https://images.unsplash.com/photo-1506744038d36-0831d10ca9ce?auto=format&fit=crop&w=1600&q=80", # yosemite
-            "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=1600&q=80", # landscape
-            "https://images.unsplash.com/photo-1434725039720-abb26e22ebe8?auto=format&fit=crop&w=1600&q=80", # field
-            "https://images.unsplash.com/photo-1532274402911-5a33904d2824?auto=format&fit=crop&w=1600&q=80", # sunset
-        ]
-        img_url = random.choice(nature_images)
-        response = requests.get(img_url, timeout=10)
+        response = requests.get(img_url, timeout=15)
         if response.status_code == 200:
-            return Image.open(BytesIO(response.content)).convert('RGBA').resize((width, height), Image.LANCZOS)
+            img = Image.open(BytesIO(response.content)).convert('RGBA')
+            # Save to cache at full resolution
+            img.save(cache_path, 'PNG', optimize=True)
+            return img.resize((width, height), Image.LANCZOS)
     except Exception as e:
         print(f"Error fetching Unsplash image: {e}")
-    
+
     # Fallback: Create a nice dark gradient
-    fallback = Image.new('RGBA', (width, height), (15, 23, 42, 255)) # Dark slate
+    fallback = Image.new('RGBA', (width, height), (15, 23, 42, 255))
     draw = ImageDraw.Draw(fallback)
     for y in range(height):
         r, g, b = 15, 23, 42
         alpha = int(255 * (1 - y/height * 0.5))
         draw.line([(0, y), (width, y)], fill=(r, g, b, alpha))
     return fallback
+
+
+_NATURE_IMAGES = [
+    # Mountains & peaks
+    "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1454496522488-7a8e488e8606?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1486870591958-9b9d0d1dda99?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1511593358241-7eea1f3c84e5?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1458668383970-8ddd3927deed?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&w=2400&q=85",
+
+    # Forests & trees
+    "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1425913397330-cf8af2ff40a1?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1542273917363-3b1817f69a2d?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1473448912268-2022ce9509d8?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?auto=format&fit=crop&w=2400&q=85",
+
+    # Landscapes & valleys
+    "https://images.unsplash.com/photo-1506744038d36-0831d10ca9ce?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1434725039720-abb26e22ebe8?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1505765050516-f72dcac9c60e?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=2400&q=85",
+
+    # Sky & clouds
+    "https://images.unsplash.com/photo-1534088568595-a066f410bcda?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1507400492013-162706c8c05e?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1496568816309-51d7c20e3b21?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1504608524841-42fe6f032b4b?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1518837695005-2083093ee35b?auto=format&fit=crop&w=2400&q=85",
+
+    # Sunsets & golden hour
+    "https://images.unsplash.com/photo-1532274402911-5a33904d2824?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1495616811223-4d98c6e9c869?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1495567720989-cebdbdd97913?auto=format&fit=crop&w=2400&q=85",
+
+    # Ocean & water
+    "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1468413253725-0d5181091126?auto=format&fit=crop&w=2400&q=85",
+
+    # Desert & sand
+    "https://images.unsplash.com/photo-1509316785289-025f5b846b35?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1473580044384-7ba9967e16a0?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1542401886-65d6c61db217?auto=format&fit=crop&w=2400&q=85",
+
+    # Night & stars
+    "https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1462331940025-496dfbfc7564?auto=format&fit=crop&w=2400&q=85",
+    "https://images.unsplash.com/photo-1507400492013-162706c8c05e?auto=format&fit=crop&w=2400&q=85",
+]
+
+
+def preload_backgrounds():
+    """Pre-warm the background cache by downloading all images.
+    Call this on app startup to ensure fast first generation.
+    Runs in background, non-blocking.
+    """
+    import threading
+
+    def _preload():
+        cache_dir = Path(__file__).parent / 'bg_cache'
+        cache_dir.mkdir(exist_ok=True)
+
+        for img_url in _NATURE_IMAGES:
+            img_id = img_url.split('/')[-1].split('?')[0]
+            cache_path = cache_dir / f"{img_id}.png"
+
+            if cache_path.exists():
+                continue  # Already cached
+
+            try:
+                response = requests.get(img_url, timeout=15)
+                if response.status_code == 200:
+                    img = Image.open(BytesIO(response.content)).convert('RGBA')
+                    img.save(cache_path, 'PNG', optimize=True)
+                    print(f"Cached: {img_id}")
+            except Exception as e:
+                print(f"Failed to cache {img_id}: {e}")
+
+    # Run in background thread
+    thread = threading.Thread(target=_preload, daemon=True)
+    thread.start()
 
 
 def wrap_arabic_text(text, font, max_width, draw):
@@ -320,40 +431,61 @@ def generate_ayah_image(
     card_draw = ImageDraw.Draw(card)
 
     if style == "nature":
-        # Draw a glassy panel in the middle for the text content
-        # We'll calculate the panel size based on content later, but for now a fixed-ish one
-        panel_margin = 60
-        panel_rect = [panel_margin, 180, card_width - panel_margin, card_height - 120]
-        
-        # Draw glassy background (blurred background + semi-transparent white)
-        panel_mask = Image.new('L', (card_width, card_height), 0)
-        panel_draw = ImageDraw.Draw(panel_mask)
-        panel_draw.rounded_rectangle(panel_rect, radius=32, fill=255)
-        
-        # Crop background area behind panel from the original background image
-        panel_crop = bg.crop((panel_rect[0], panel_rect[1], panel_rect[2], panel_rect[3]))
-        # Apply Gaussian blur
-        panel_blur = panel_crop.filter(ImageFilter.GaussianBlur(radius=30))
-        
-        # Create a local mask for the cropped area (rounded corners)
-        local_mask = Image.new('L', (panel_rect[2] - panel_rect[0], panel_rect[3] - panel_rect[1]), 0)
-        local_draw = ImageDraw.Draw(local_mask)
-        local_draw.rounded_rectangle([0, 0, panel_rect[2] - panel_rect[0], panel_rect[3] - panel_rect[1]], radius=32, fill=255)
-        
-        # Paste blurred background back onto card
-        card.paste(panel_blur, (panel_rect[0], panel_rect[1]), local_mask)
-        
-        # Add frosted glass effect (semi-transparent white) - Increased opacity for better contrast
-        glass_overlay = Image.new('RGBA', (card_width, card_height), (230, 230, 230, 220))
-        card.paste(glass_overlay, (0, 0), panel_mask)
-        
-        # Glassy border
-        card_draw.rounded_rectangle(panel_rect, radius=32, outline=(255, 255, 255, 180), width=2)
+        # CSS-style glassmorphism: backdrop-filter blur + dark overlay
+        # Panel starts higher to enclose the badge
+        panel_margin = int(card_width * 0.04)
+        panel_top = 50  # Start near top to enclose badge
+        panel_rect = [panel_margin, panel_top, card_width - panel_margin, card_height - int(card_height * 0.08)]
+        panel_radius = 60
 
-    # Content margins
-    margin_x = 80
-    margin_top = 60
-    margin_bottom = 80
+        # Create rounded mask for the glass panel
+        panel_mask = Image.new('L', (panel_rect[2] - panel_rect[0], panel_rect[3] - panel_rect[1]), 0)
+        mask_draw = ImageDraw.Draw(panel_mask)
+        mask_draw.rounded_rectangle([0, 0, panel_rect[2] - panel_rect[0], panel_rect[3] - panel_rect[1]], radius=panel_radius, fill=255)
+
+        # Extract the background area and apply blur (backdrop-filter simulation)
+        # OPTIMIZATION: Downsample before blur for speed, then upsample
+        panel_bg = bg.crop((panel_rect[0], panel_rect[1], panel_rect[2], panel_rect[3]))
+        panel_w, panel_h = panel_bg.size
+
+        # Downsample to 1/4 size for faster blur
+        small_size = (panel_w // 4, panel_h // 4)
+        panel_small = panel_bg.resize(small_size, Image.LANCZOS)
+
+        # Blur the small version (much faster!)
+        panel_blur_small = panel_small.filter(ImageFilter.GaussianBlur(radius=10))
+
+        # Upscale back to original size
+        panel_blur = panel_blur_small.resize((panel_w, panel_h), Image.LANCZOS)
+
+        # Darken the blurred background for contrast
+        enhancer = ImageEnhance.Brightness(panel_blur)
+        panel_blur = enhancer.enhance(0.65)
+
+        # Paste the blurred background with rounded corners
+        card.paste(panel_blur, (panel_rect[0], panel_rect[1]), panel_mask)
+
+        # Build the glass overlay layer (dark tint only - no cheesy shine)
+        glass_layer = Image.new('RGBA', (panel_rect[2] - panel_rect[0], panel_rect[3] - panel_rect[1]), (0, 0, 0, 0))
+        g_draw = ImageDraw.Draw(glass_layer)
+
+        # Base dark tint (semi-transparent)
+        g_draw.rounded_rectangle([0, 0, panel_rect[2] - panel_rect[0], panel_rect[3] - panel_rect[1]], radius=panel_radius, fill=(15, 20, 35, 120))
+
+        # Apply the glass layer using alpha_composite (proper blending)
+        temp_canvas = card.crop((panel_rect[0], panel_rect[1], panel_rect[2], panel_rect[3]))
+        temp_canvas = Image.alpha_composite(temp_canvas.convert('RGBA'), glass_layer)
+        card.paste(temp_canvas, (panel_rect[0], panel_rect[1]), panel_mask)
+
+        # Glass borders
+        card_draw.rounded_rectangle(panel_rect, radius=panel_radius, outline=(255, 255, 255, 70), width=2)
+        inner_rect = [panel_rect[0] + 3, panel_rect[1] + 3, panel_rect[2] - 3, panel_rect[3] - 3]
+        card_draw.rounded_rectangle(inner_rect, radius=panel_radius - 2, outline=(255, 255, 255, 25), width=1)
+
+    # Content margins - scaled for higher resolution
+    margin_x = 120
+    margin_top = 90
+    margin_bottom = 120
 
     content_width = card_width - 2 * margin_x
     current_y = margin_top
@@ -361,23 +493,23 @@ def generate_ayah_image(
     # Estimate content to determine if we need smaller fonts
     arabic_word_count = len(arabic_text.split())
     translation_word_count = len(translation_text.split()) if translation_text else 0
-    
-    # Responsive font sizing
+
+    # Responsive font sizing - scaled 1.5x for higher resolution
     if arabic_word_count > 30 or translation_word_count > 60:
-        arabic_font_size = 56
-        translation_font_size = 32
+        arabic_font_size = 84
+        translation_font_size = 48
         scale = 0.8
     elif arabic_word_count > 20 or translation_word_count > 40:
-        arabic_font_size = 64
-        translation_font_size = 38
+        arabic_font_size = 96
+        translation_font_size = 57
         scale = 0.9
     else:
-        arabic_font_size = 72
-        translation_font_size = 44
+        arabic_font_size = 108
+        translation_font_size = 66
         scale = 1.0
 
     # Draw badge with surah name
-    badge_font = get_font(int(28 * scale))
+    badge_font = get_font(int(42 * scale))
     
     # Construct refined badge text
     name_part = surah_english_name or (f"Surah {surah_number}")
@@ -395,8 +527,8 @@ def generate_ayah_image(
     badge_height = badge_bbox[3] - badge_bbox[1]
     badge_x = (card_width - badge_width) // 2
 
-    badge_padding_x = 28
-    badge_padding_y = 12
+    badge_padding_x = 42
+    badge_padding_y = 18
     pill_height = badge_height + badge_padding_y * 2
     
     card_draw.rounded_rectangle(
@@ -452,7 +584,7 @@ def generate_ayah_image(
         current_y += arabic_line_height
 
     # Draw separator with generous spacing
-    current_y += int(60 * scale)  # Space before divider
+    current_y += int(100 * scale)  # Space before divider
 
     separator_padding = int(120 * scale)
     separator_thickness = 2
@@ -478,7 +610,7 @@ def generate_ayah_image(
         fill=divider_color
     )
     
-    current_y += int(60 * scale)  # Space after divider
+    current_y += int(100 * scale)  # Space after divider
 
     # Draw translation - BIGGER text
     if translation_text and trans_lines:
@@ -495,9 +627,9 @@ def generate_ayah_image(
             )
             current_y += translation_line_height
 
-    # Draw footer branding
-    footer_y = card_height - 50
-    footer_font = get_font(20)
+    # Draw footer branding - scaled for higher resolution
+    footer_y = card_height - 75
+    footer_font = get_font(30)
     
     footer_text = "Quran Reader  •  islam-llm.app"
     footer_bbox = card_draw.textbbox((0, 0), footer_text, font=footer_font)

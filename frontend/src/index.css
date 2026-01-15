@@ -665,6 +665,26 @@ body {
 }
 
 /* =============================================================================
+   SURAH COMPLETION MODAL
+   ============================================================================= */
+
+.surah-completion-content {
+    text-align: center;
+}
+
+.surah-completion-message {
+    font-size: 1rem;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.surah-completion-subtitle {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+/* =============================================================================
    LOADING & ALERTS
    ============================================================================= */
 
@@ -1501,8 +1521,8 @@ code {
 }
 
 .btn-icon-floating:hover {
-    background: var(--gradient-accent);
-    border-color: transparent;
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.2);
     color: white;
     transform: scale(1.05);
 }
@@ -2148,7 +2168,7 @@ code {
     }
 
     .surah-nav-footer .d-flex {
-        flex-direction: column;
+        flex-direction: column-reverse;
         gap: 12px;
     }
 

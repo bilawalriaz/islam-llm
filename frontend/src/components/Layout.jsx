@@ -109,7 +109,7 @@ function Layout() {
             </div>
 
             <footer>
-                <p>&copy; {new Date().getFullYear()} Quran Reader. Quran data from <a href="https://alquran.cloud" target="_blank" rel="noopener noreferrer">Al Quran Cloud API</a></p>
+                <p>&copy; {new Date().getFullYear()} Quran Reader.</p>
             </footer>
         </>
     );
