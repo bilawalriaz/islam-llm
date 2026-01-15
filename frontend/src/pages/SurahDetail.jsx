@@ -85,6 +85,7 @@ function SurahDetail() {
     const [loadingTranslation, setLoadingTranslation] = useState(false);
     const [playingAyah, setPlayingAyah] = useState(null);
     const [autoPlay, setAutoPlay] = useState(false);
+    const [loopAyah, setLoopAyah] = useState(false);
 
     // Bookmark state - map of ayah_id -> bookmark_id (or null if not bookmarked)
     const [bookmarks, setBookmarks] = useState({});
@@ -140,7 +141,7 @@ function SurahDetail() {
     // Detect when progress card scrolls out of view to show floating indicator
     useEffect(() => {
         const handleScroll = () => {
-            if (progressCardRef.current && isAuthenticated && completionStats) {
+            if (progressCardRef.current && ayahs.length > 0) {
                 const rect = progressCardRef.current.getBoundingClientRect();
                 // Show when the card is mostly out of view (top of card is below viewport top + 100px)
                 // This makes it appear earlier than before
@@ -155,7 +156,7 @@ function SurahDetail() {
         handleScroll(); // Initial check
 
         return () => window.removeEventListener('scroll', handleScroll);
-    }, [isAuthenticated, completionStats]);
+    }, [ayahs]);
 
     // Clean up preloaded audio when reciter changes
     useEffect(() => {
@@ -200,15 +201,18 @@ function SurahDetail() {
                     markAyahAsCompleted(currentAyah);
                 }
 
-                // Auto-play next ayah if enabled
-                if (autoPlay) {
-                    const nextAyah = playingAyah + 1;
-                    if (nextAyah < ayahs.length) {
-                        playAyah(nextAyah);
-                    } else {
-                        setPlayingAyah(null);
-                    }
+                // Check if loop mode is enabled - replay same ayah
+                if (loopAyah) {
+                    playAyah(playingAyah);
+                    return;
+                }
+
+                // Continue to next ayah (either autoPlay or normal continuation)
+                const nextAyah = playingAyah + 1;
+                if (nextAyah < ayahs.length) {
+                    playAyah(nextAyah);
                 } else {
+                    // End of surah reached
                     setPlayingAyah(null);
                 }
             } else {
@@ -228,7 +232,7 @@ function SurahDetail() {
             audio.removeEventListener('ended', handleEnded);
             audio.removeEventListener('error', handleError);
         };
-    }, [autoPlay, playingAyah, ayahs]);
+    }, [autoPlay, loopAyah, playingAyah, ayahs]);
 
     // Save progress when playing ayah changes (with debounce)
     useEffect(() => {
@@ -382,12 +386,13 @@ function SurahDetail() {
         }
     };
 
-    const playAyah = (index) => {
+    const playAyah = (index, edition = null) => {
         const ayah = ayahs[index];
         if (!ayah) return;
 
-        // Audio files are served directly from /audio/{reciter}/{ayah_number}.mp3
-        const audioUrl = `/audio/${selectedAudioEdition}/${ayah.number}.mp3`;
+        // Use provided edition or fall back to current state
+        const audioEdition = edition || selectedAudioEdition;
+        const audioUrl = `/audio/${audioEdition}/${ayah.number}.mp3`;
 
         if (audioRef.current) {
             audioRef.current.src = audioUrl;
@@ -396,13 +401,16 @@ function SurahDetail() {
                     lastPlayingAyahRef.current = index;
                     setPlayingAyah(index);
                     // Preload next 2 ayahs after starting playback
-                    preloadNextAyahs(index);
+                    preloadNextAyahs(index, audioEdition);
                 })
                 .catch(err => console.error('Playback failed:', err));
         }
     };
 
-    const preloadNextAyahs = (currentIndex) => {
+    const preloadNextAyahs = (currentIndex, edition = null) => {
+        // Use provided edition or fall back to current state
+        const audioEdition = edition || selectedAudioEdition;
+
         // Clear previous preloaded audio
         Object.values(preloadedAudioRefs.current).forEach(audio => {
             if (audio) {
@@ -417,7 +425,7 @@ function SurahDetail() {
             const nextIndex = currentIndex + i;
             if (nextIndex < ayahs.length) {
                 const nextAyah = ayahs[nextIndex];
-                const audioUrl = `/audio/${selectedAudioEdition}/${nextAyah.number}.mp3`;
+                const audioUrl = `/audio/${audioEdition}/${nextAyah.number}.mp3`;
 
                 // Create new audio element for preloading
                 const preloadedAudio = new Audio();
@@ -546,20 +554,19 @@ function SurahDetail() {
                                     const currentAyahIndex = playingAyah !== null
                                         ? playingAyah
                                         : lastPlayingAyahRef.current;
+                                    const newEdition = e.target.value;
 
                                     // Change reciter
-                                    setSelectedAudioEdition(e.target.value);
+                                    setSelectedAudioEdition(newEdition);
 
                                     // If something was playing or paused, restart from the same ayah with new reciter
                                     if (currentAyahIndex !== null && currentAyahIndex !== undefined) {
-                                        // Small delay to ensure state update
-                                        setTimeout(() => {
-                                            playAyah(currentAyahIndex);
-                                            // If it wasn't playing before, pause it after starting
-                                            if (!wasPlaying) {
-                                                setTimeout(() => pauseAyah(), 100);
-                                            }
-                                        }, 50);
+                                        // Pass new edition directly to avoid race condition
+                                        playAyah(currentAyahIndex, newEdition);
+                                        // If it wasn't playing before, pause it after starting
+                                        if (!wasPlaying) {
+                                            pauseAyah();
+                                        }
                                     }
                                 }}
                             >
@@ -623,86 +630,121 @@ function SurahDetail() {
                 </div>
             </div>
 
-            {/* Completion Progress Bar (for authenticated users) */}
-            {isAuthenticated && completionStats && (
-                <div className="card mb-4" ref={progressCardRef}>
-                    <div className="card-body">
-                        <div className="d-flex justify-between align-center mb-2">
-                            <span className="text-muted small">Your Progress</span>
-                            <span className="text-muted small">
-                                {completionStats.completed_count} / {completionStats.total_ayahs} ayahs
-                            </span>
-                        </div>
-                        <div className="progress-bar-container">
-                            <div
-                                className="progress-bar-fill"
-                                style={{ width: `${completionStats.completion_percentage}%` }}
-                            />
-                        </div>
-                        <div className="d-flex gap-2 mt-3">
-                            {completionStats.first_unread_ayah && (
-                                <Button
-                                    variant="secondary"
-                                    size="small"
-                                    onClick={() => {
-                                        const firstUnreadIndex = ayahs.findIndex(
-                                            a => a.number_in_surah === completionStats.first_unread_ayah
-                                        );
-                                        if (firstUnreadIndex >= 0) {
-                                            ayahRefs.current[firstUnreadIndex]?.scrollIntoView({
-                                                behavior: 'smooth',
-                                                block: 'center',
-                                            });
-                                        }
-                                    }}
-                                >
-                                    Resume from Ayah {completionStats.first_unread_ayah}
-                                </Button>
-                            )}
-                        </div>
-
-                        {/* Ayah Heatmap Visualization */}
-                        <div className="ayah-heatmap" style={{ marginTop: '16px' }}>
-                            {Array.from({ length: completionStats.total_ayahs }, (_, i) => {
-                                const ayahNum = i + 1;
-                                const isRead = completedAyahs.includes(ayahNum);
-                                const isPlaying = playingAyah !== null && ayahs[playingAyah]?.number_in_surah === ayahNum;
-
-                                return (
-                                    <div
-                                        key={ayahNum}
-                                        className={`heatmap-cell ${isRead ? 'read' : isPlaying ? 'reading' : 'unread'}`}
+            {/* Surah Progress Card (for all users) */}
+            <div className="card mb-4" ref={progressCardRef}>
+                <div className="card-body">
+                    {isAuthenticated && completionStats ? (
+                        <>
+                            <div className="d-flex justify-between align-center mb-2">
+                                <span className="text-muted small">Your Progress</span>
+                                <span className="text-muted small">
+                                    {completionStats.completed_count} / {completionStats.total_ayahs} ayahs
+                                </span>
+                            </div>
+                            <div className="progress-bar-container">
+                                <div
+                                    className="progress-bar-fill"
+                                    style={{ width: `${completionStats.completion_percentage}%` }}
+                                />
+                            </div>
+                            <div className="d-flex gap-2 mt-3">
+                                {completionStats.first_unread_ayah && (
+                                    <Button
+                                        variant="secondary"
+                                        size="small"
                                         onClick={() => {
-                                            const ayahIndex = ayahs.findIndex(a => a.number_in_surah === ayahNum);
-                                            if (ayahIndex >= 0) {
-                                                ayahRefs.current[ayahIndex]?.scrollIntoView({
+                                            const firstUnreadIndex = ayahs.findIndex(
+                                                a => a.number_in_surah === completionStats.first_unread_ayah
+                                            );
+                                            if (firstUnreadIndex >= 0) {
+                                                ayahRefs.current[firstUnreadIndex]?.scrollIntoView({
                                                     behavior: 'smooth',
                                                     block: 'center',
                                                 });
                                             }
                                         }}
-                                        title={`Ayah ${ayahNum}${isRead ? ' (read)' : isPlaying ? ' (playing)' : ' (unread)'}`}
-                                    />
-                                );
-                            })}
-                        </div>
-                        <div className="heatmap-legend">
-                            <div className="heatmap-legend-item">
-                                <div className="heatmap-legend-dot read"></div>
-                                <span>Read</span>
+                                    >
+                                        Resume from Ayah {completionStats.first_unread_ayah}
+                                    </Button>
+                                )}
                             </div>
-                            <div className="heatmap-legend-item">
-                                <div className="heatmap-legend-dot reading"></div>
-                                <span>Playing</span>
+
+                            {/* Ayah Heatmap Visualization */}
+                            <div className="ayah-heatmap" style={{ marginTop: '16px' }}>
+                                {Array.from({ length: completionStats.total_ayahs }, (_, i) => {
+                                    const ayahNum = i + 1;
+                                    const isRead = completedAyahs.includes(ayahNum);
+                                    const isPlaying = playingAyah !== null && ayahs[playingAyah]?.number_in_surah === ayahNum;
+
+                                    return (
+                                        <div
+                                            key={ayahNum}
+                                            className={`heatmap-cell ${isRead ? 'read' : isPlaying ? 'reading' : 'unread'}`}
+                                            onClick={() => {
+                                                const ayahIndex = ayahs.findIndex(a => a.number_in_surah === ayahNum);
+                                                if (ayahIndex >= 0) {
+                                                    ayahRefs.current[ayahIndex]?.scrollIntoView({
+                                                        behavior: 'smooth',
+                                                        block: 'center',
+                                                    });
+                                                }
+                                            }}
+                                            title={`Ayah ${ayahNum}${isRead ? ' (read)' : isPlaying ? ' (playing)' : ' (unread)'}`}
+                                        />
+                                    );
+                                })}
                             </div>
-                            <div className="heatmap-legend-item">
-                                <div className="heatmap-legend-dot unread"></div>
-                                <span>Unread</span>
+                            <div className="heatmap-legend">
+                                <div className="heatmap-legend-item">
+                                    <div className="heatmap-legend-dot read"></div>
+                                    <span>Read</span>
+                                </div>
+                                <div className="heatmap-legend-item">
+                                    <div className="heatmap-legend-dot reading"></div>
+                                    <span>Playing</span>
+                                </div>
+                                <div className="heatmap-legend-item">
+                                    <div className="heatmap-legend-dot unread"></div>
+                                    <span>Unread</span>
+                                </div>
                             </div>
-                        </div>
-                    </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="d-flex justify-between align-center mb-2">
+                                <span className="text-muted small">Surah Overview</span>
+                                <span className="text-muted small">
+                                    {ayahs.length} ayahs
+                                </span>
+                            </div>
+
+                            {/* Ayah Heatmap Visualization - click to navigate */}
+                            <div className="ayah-heatmap" style={{ marginTop: '8px' }}>
+                                {ayahs.map((ayah, index) => {
+                                    const isPlaying = playingAyah === index;
+
+                                    return (
+                                        <div
+                                            key={ayah.number_in_surah}
+                                            className={`heatmap-cell ${isPlaying ? 'reading' : 'unread'}`}
+                                            onClick={() => {
+                                                ayahRefs.current[index]?.scrollIntoView({
+                                                    behavior: 'smooth',
+                                                    block: 'center',
+                                                });
+                                            }}
+                                            title={`Ayah ${ayah.number_in_surah}${isPlaying ? ' (playing)' : ''} - Click to navigate`}
+                                        />
+                                    );
+                                })}
+                            </div>
+                            <p className="text-muted small" style={{ marginTop: '12px' }}>
+                                Click on any cell to jump to that ayah. <Link to="/login" style={{ color: 'var(--accent-color)' }}>Sign in</Link> to track your reading progress.
+                            </p>
+                        </>
+                    )}
                 </div>
-            )}
+            </div>
 
             {/* Ayahs List */}
             {ayahs.length === 0 ? (
@@ -726,7 +768,7 @@ function SurahDetail() {
                                     <span className={`ayah-number-badge ${isCompleted ? 'completed' : ''}`}>
                                         {isCompleted && (
                                             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '4px' }}>
-                                                <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                                                <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
                                             </svg>
                                         )}
                                         {ayah.number_in_surah}
@@ -742,7 +784,7 @@ function SurahDetail() {
                                             {isLoadingBookmark ? (
                                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                                     <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="32">
-                                                        <animate attributeName="stroke-dashoffset" from="32" to="0" dur="1s" repeatCount="indefinite"/>
+                                                        <animate attributeName="stroke-dashoffset" from="32" to="0" dur="1s" repeatCount="indefinite" />
                                                     </circle>
                                                 </svg>
                                             ) : isBookmarked ? (
@@ -810,19 +852,21 @@ function SurahDetail() {
             )}
 
             {/* Floating Progress Indicator */}
-            {showFloatingProgress && completionStats && (
+            {showFloatingProgress && (
                 <div className="floating-progress">
                     <div className="floating-progress-content">
                         <div className="floating-progress-info">
                             <span className="floating-progress-label">
-                                Ayah {playingAyah !== null ? ayahs[playingAyah]?.number_in_surah : '-'} of {completionStats.total_ayahs}
+                                Ayah {playingAyah !== null ? ayahs[playingAyah]?.number_in_surah : '-'} of {ayahs.length}
                             </span>
-                            <div className="floating-progress-bar">
-                                <div
-                                    className="floating-progress-bar-fill"
-                                    style={{ width: `${completionStats.completion_percentage}%` }}
-                                />
-                            </div>
+                            {completionStats && (
+                                <div className="floating-progress-bar">
+                                    <div
+                                        className="floating-progress-bar-fill"
+                                        style={{ width: `${completionStats.completion_percentage}%` }}
+                                    />
+                                </div>
+                            )}
                         </div>
                         <div className="floating-progress-controls">
                             {/* Prev Button */}
@@ -858,7 +902,7 @@ function SurahDetail() {
                                         // Currently paused - resume from last playing ayah, or first unread, or beginning
                                         const resumeIndex = lastPlayingAyahRef.current !== null
                                             ? lastPlayingAyahRef.current
-                                            : completionStats.first_unread_ayah
+                                            : completionStats?.first_unread_ayah
                                                 ? ayahs.findIndex(a => a.number_in_surah === completionStats.first_unread_ayah)
                                                 : 0;
                                         playAyah(resumeIndex >= 0 ? resumeIndex : 0);
@@ -900,6 +944,17 @@ function SurahDetail() {
                                 </svg>
                             </button>
 
+                            {/* Loop Toggle */}
+                            <button
+                                className={`btn-icon-floating ${loopAyah ? 'btn-icon-floating-active' : ''}`}
+                                onClick={() => setLoopAyah(prev => !prev)}
+                                title={loopAyah ? 'Disable loop (currently looping)' : 'Enable loop (repeat current ayah)'}
+                            >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"></path>
+                                </svg>
+                            </button>
+
                             {/* Volume Control */}
                             <div className="floating-progress-volume">
                                 <button
@@ -909,11 +964,11 @@ function SurahDetail() {
                                 >
                                     {volume === 0 ? (
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                            <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+                                            <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
                                         </svg>
                                     ) : (
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                                            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
                                         </svg>
                                     )}
                                 </button>
@@ -939,20 +994,19 @@ function SurahDetail() {
                                     const currentAyahIndex = playingAyah !== null
                                         ? playingAyah
                                         : lastPlayingAyahRef.current;
+                                    const newEdition = e.target.value;
 
                                     // Change reciter
-                                    setSelectedAudioEdition(e.target.value);
+                                    setSelectedAudioEdition(newEdition);
 
                                     // If something was playing or paused, restart from the same ayah with new reciter
                                     if (currentAyahIndex !== null && currentAyahIndex !== undefined) {
-                                        // Small delay to ensure state update
-                                        setTimeout(() => {
-                                            playAyah(currentAyahIndex);
-                                            // If it wasn't playing before, pause it after starting
-                                            if (!wasPlaying) {
-                                                setTimeout(() => pauseAyah(), 100);
-                                            }
-                                        }, 50);
+                                        // Pass new edition directly to avoid race condition
+                                        playAyah(currentAyahIndex, newEdition);
+                                        // If it wasn't playing before, pause it after starting
+                                        if (!wasPlaying) {
+                                            pauseAyah();
+                                        }
                                     }
                                 }}
                                 title="Reciter"

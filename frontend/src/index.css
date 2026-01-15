@@ -844,7 +844,7 @@ code {
     color: var(--text-primary);
 }
 
-.auth-card > p {
+.auth-card>p {
     color: var(--text-secondary);
     font-size: 0.9375rem;
     margin-bottom: 32px;
@@ -1105,9 +1105,12 @@ code {
 }
 
 @keyframes pulse {
-    0%, 100% {
+
+    0%,
+    100% {
         box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4);
     }
+
     50% {
         box-shadow: 0 0 0 8px rgba(249, 115, 22, 0);
     }
@@ -1283,6 +1286,7 @@ code {
         opacity: 0;
         transform: translateY(20px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -1386,6 +1390,16 @@ code {
 .btn-icon-floating-primary:hover {
     background: var(--accent-hover);
     transform: scale(1.05);
+}
+
+.btn-icon-floating-active {
+    background: var(--gradient-accent);
+    border-color: transparent;
+    color: white;
+}
+
+.btn-icon-floating-active:hover {
+    background: var(--accent-hover);
 }
 
 .floating-progress-volume {
@@ -1959,17 +1973,36 @@ code {
     }
 
     .ayah-header {
-        flex-direction: column;
-        gap: 12px;
-        align-items: flex-start;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .ayah-number-badge {
+        padding: 6px 10px;
+        font-size: 0.75rem;
+        flex-shrink: 0;
     }
 
     .ayah-actions {
-        width: 100%;
+        display: flex;
+        gap: 4px;
+        flex-shrink: 0;
     }
 
     .btn-icon {
-        flex: 1;
+        width: 32px;
+        height: 32px;
+        min-width: 32px;
+        max-width: 32px;
+        flex: 0 0 32px;
+        padding: 0;
+    }
+
+    .btn-icon svg {
+        width: 14px;
+        height: 14px;
     }
 
     .ayah-translation {
