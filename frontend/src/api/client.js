@@ -245,6 +245,21 @@ export async function getEditions() {
     return fetchAPI('/quran/editions');
 }
 
+/**
+ * Search Quran with full-text search
+ * @param {string} query - Search query text
+ * @param {Object} options - Search options
+ * @param {string} options.language - Filter by language: 'ar', 'en', or 'all' (default: auto-detect)
+ * @param {string} options.edition - Filter by specific edition identifier
+ * @param {number} options.surah_id - Filter to specific surah
+ * @param {number} options.limit - Max results (default: 50, max: 200)
+ * @param {number} options.offset - Pagination offset (default: 0)
+ */
+export async function searchQuran(query, options = {}) {
+    const params = new URLSearchParams({ q: query, ...options });
+    return fetchAPI(`/quran/search?${params}`);
+}
+
 // =============================================================================
 // BOOKMARKS API
 // =============================================================================
@@ -562,4 +577,78 @@ export function getAyahShareImageUrlById(ayahId, translation = 'en.sahih', squar
         format,
     });
     return `/api/share/ayah/by-id/${ayahId}?${params.toString()}`;
+}
+
+// =============================================================================
+// USER STATS SHARING API
+// =============================================================================
+
+/**
+ * Generate a new share profile for the authenticated user
+ * Creates a unique share_id if one doesn't exist
+ */
+export async function generateShareProfile() {
+    return fetchAPI('/share/generate', {
+        method: 'POST',
+    });
+}
+
+/**
+ * Get the current user's share profile settings
+ * Returns null if no share profile exists
+ */
+export async function getShareSettings() {
+    try {
+        return await fetchAPI('/share/settings');
+    } catch (e) {
+        // If 404 or not found, return null
+        return null;
+    }
+}
+
+/**
+ * Update the current user's share profile settings
+ * @param {Object} settings - Settings to update
+ * @param {string} settings.theme - Theme: 'classic', 'nature', 'dark', or 'minimal'
+ * @param {boolean} settings.show_reading_progress - Show reading progress stats
+ * @param {boolean} settings.show_completion - Show completion stats
+ * @param {boolean} settings.show_streak - Show reading streak
+ * @param {boolean} settings.show_bookmarks - Show bookmarks count
+ * @param {boolean} settings.show_listening_stats - Show listening stats
+ */
+export async function updateShareSettings(settings) {
+    return fetchAPI('/share/settings', {
+        method: 'PUT',
+        body: JSON.stringify(settings),
+    });
+}
+
+/**
+ * Get public stats for a share profile (no auth required)
+ * @param {string} shareId - The share ID (e.g., 'a7x2k9')
+ */
+export async function getPublicShareStats(shareId) {
+    const response = await fetch(`${API_BASE}/share/${shareId}`);
+    if (!response.ok) {
+        throw new Error('Share profile not found');
+    }
+    return response.json();
+}
+
+/**
+ * Get the share profile URL for a user
+ * @param {string} shareId - The share ID
+ * @returns {string} The full share URL
+ */
+export function getShareProfileUrl(shareId) {
+    return `${window.location.origin}/share/${shareId}`;
+}
+
+/**
+ * Get the OG image URL for a share profile
+ * @param {string} shareId - The share ID
+ * @returns {string} The OG image URL
+ */
+export function getShareProfileOgImageUrl(shareId) {
+    return `${window.location.origin}/api/share/og/${shareId}.png`;
 }

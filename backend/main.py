@@ -6,6 +6,10 @@ and provides audio file streaming with user authentication via Supabase,
 bookmarks, and progress tracking.
 """
 
+# Load environment variables from .env file FIRST
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, Query, Header, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
@@ -31,9 +35,21 @@ AUDIO_PATH = Path(__file__).parent.parent / "quran-dump" / "audio"
 # Supabase configuration
 SUPABASE_URL = "https://zxmyoojcuihavbhiblwc.supabase.co"
 SUPABASE_KEY = os.environ.get("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4bXlvb2pjdWloYXZiaGlibHdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1MDMwODAsImV4cCI6MjA4NDA3OTA4MH0.WTrrU42RBAW1rIxukNsVDYZ5ifYMiuQe_nlpEPgkjsM")
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+
+print(f"DEBUG: SUPABASE_SERVICE_ROLE_KEY loaded: {bool(SUPABASE_SERVICE_ROLE_KEY)}")
+if SUPABASE_SERVICE_ROLE_KEY:
+    print(f"DEBUG: Service key length: {len(SUPABASE_SERVICE_ROLE_KEY)}")
+    print(f"DEBUG: Service key starts with: {SUPABASE_SERVICE_ROLE_KEY[:20]}...")
+else:
+    print("DEBUG: Service role key NOT found in environment!")
 
 # Create Supabase client for public operations
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# Create Supabase client with service role key for admin operations (bypasses RLS)
+supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) if SUPABASE_SERVICE_ROLE_KEY else None
+print(f"DEBUG: supabase_admin client created: {supabase_admin is not None}")
 
 app = FastAPI(title="Quran Reader API")
 
@@ -69,21 +85,67 @@ def get_db_connection():
 async def verify_token(authorization: str = Header(None)) -> Optional[str]:
     """Verify Supabase JWT token and return user_id (UUID)."""
     if not authorization:
+        print("DEBUG: verify_token - No authorization header")
         return None
 
     if not authorization.startswith("Bearer "):
+        print("DEBUG: verify_token - Invalid authorization format")
         return None
+
+    token = authorization[7:]  # Remove "Bearer " prefix
+    print(f"DEBUG: verify_token - Token length: {len(token)}, starts with: {token[:20]}...")
+
+    try:
+        # Verify the JWT token with Supabase
+        print("DEBUG: verify_token - Calling supabase.auth.get_user()...")
+        user = supabase.auth.get_user(token)
+        print(f"DEBUG: verify_token - Supabase response: {user}")
+
+        if user and user.user:
+            print(f"DEBUG: verify_token - SUCCESS: user_id={user.user.id}")
+            return user.user.id
+        print("DEBUG: verify_token - FAILED: No user in response")
+        return None
+    except Exception as e:
+        print(f"DEBUG: verify_token - Exception: {e}")
+        return None
+
+
+async def get_current_user_with_token(authorization: str = Header(None)):
+    """Get current user profile AND return the access token for password updates."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing authorization header")
+
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid authorization format")
 
     token = authorization[7:]  # Remove "Bearer " prefix
 
     try:
         # Verify the JWT token with Supabase
         user = supabase.auth.get_user(token)
-        if user and user.user:
-            return user.user.id
-        return None
-    except Exception:
-        return None
+        if not user or not user.user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+        user_id = user.user.id
+
+        # Get user profile
+        response = supabase.table("profiles").select("*").eq("id", user_id).single().execute()
+
+        if not response.data:
+            raise HTTPException(status_code=401, detail="User not found")
+
+        return {
+            "id": response.data["id"],
+            "name": response.data.get("name", ""),
+            "email": response.data.get("email", ""),
+            "created_at": response.data.get("created_at", ""),
+            "access_token": token
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"User not found: {str(e)}")
 
 
 async def get_current_user(user_id: str = Depends(verify_token)):
@@ -92,7 +154,9 @@ async def get_current_user(user_id: str = Depends(verify_token)):
         raise HTTPException(status_code=401, detail="Invalid or missing token")
 
     try:
-        response = supabase.table("profiles").select("*").eq("id", user_id).single().execute()
+        # Use admin client for profile fetching to bypass RLS
+        client = supabase_admin if supabase_admin else supabase
+        response = client.table("profiles").select("*").eq("id", user_id).single().execute()
 
         if not response.data:
             raise HTTPException(status_code=401, detail="User not found")
@@ -271,6 +335,319 @@ def get_ayah_audio(ayah_number: int, edition: str = Query("ar.alafasy")):
         conn.close()
 
 
+@app.get("/api/quran/search")
+def search_quran(
+    q: str = Query(..., description="Search query text", min_length=1),
+    language: Optional[str] = Query(None, description="Filter by language: ar, en, or all (default: auto-detect)"),
+    edition: Optional[str] = Query(None, description="Filter by specific edition identifier"),
+    surah_id: Optional[int] = Query(None, description="Filter to specific surah"),
+    limit: int = Query(50, description="Max results (default: 50, max: 200)", ge=1, le=200),
+    offset: int = Query(0, description="Pagination offset", ge=0)
+):
+    """
+    Full-text search across Quran ayahs using FTS5.
+
+    Supports diacritic-insensitive Arabic search and English text search.
+    Auto-detects query language if not specified.
+    """
+    import re
+
+    # Arabic diacritics pattern
+    ARABIC_DIACRITICS = re.compile(r'[\u064B-\u065F\u0670\u0640]')
+
+    def remove_arabic_diacritics(text: str) -> str:
+        return ARABIC_DIACRITICS.sub('', text)
+
+    def detect_language(query: str) -> str:
+        """Detect if query is Arabic or English based on character range."""
+        arabic_chars = sum(1 for c in query if '\u0600' <= c <= '\u06ff')
+        return 'ar' if arabic_chars > len(query) * 0.3 else 'en'
+
+    # Auto-detect language if not specified
+    if language is None:
+        language = detect_language(q)
+
+    # Normalize limit
+    limit = min(limit, 200)
+
+    # Normalize Arabic query (remove diacritics)
+    normalized_query = remove_arabic_diacritics(q) if language == 'ar' else q
+
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+
+        results = []
+        total_count = 0
+
+        # Build the search query based on language
+        if language == 'ar':
+            # Arabic search - use text_normalized column
+            where_clause = "WHERE fts_arabic MATCH ?"
+            params = [normalized_query]
+
+            # Add filters
+            if edition:
+                cursor.execute("SELECT id FROM editions WHERE identifier = ?", (edition,))
+                edition_row = cursor.fetchone()
+                if edition_row:
+                    where_clause += " AND f.edition_id = ?"
+                    params.append(edition_row[0])
+
+            if surah_id:
+                where_clause += " AND f.surah_id = ?"
+                params.append(surah_id)
+
+            # Get total count
+            count_sql = f"SELECT COUNT(*) FROM fts_arabic f {where_clause}"
+            cursor.execute(count_sql, params)
+            total_count = cursor.fetchone()[0]
+
+            # Get results with pagination
+            sql = f"""
+                SELECT
+                    f.ayah_id,
+                    f.ayah_number,
+                    f.surah_id,
+                    f.number_in_surah,
+                    f.text,
+                    f.edition_id,
+                    e.identifier as edition_identifier,
+                    e.language,
+                    s.name as surah_name,
+                    s.english_name as surah_english_name,
+                    s.english_name_translation
+                FROM fts_arabic f
+                JOIN editions e ON f.edition_id = e.id
+                JOIN surahs s ON f.surah_id = s.id
+                {where_clause}
+                ORDER BY f.ayah_number
+                LIMIT ? OFFSET ?
+            """
+            cursor.execute(sql, params + [limit, offset])
+            rows = cursor.fetchall()
+
+            for row in rows:
+                highlighted = highlight_match(row["text"], normalized_query, language='ar')
+                results.append({
+                    "ayah_number": row["ayah_number"],
+                    "surah_id": row["surah_id"],
+                    "number_in_surah": row["number_in_surah"],
+                    "surah_name": get_row_value(row, "surah_name"),
+                    "surah_english_name": get_row_value(row, "surah_english_name"),
+                    "surah_english_name_translation": get_row_value(row, "surah_english_name_translation"),
+                    "text": row["text"],
+                    "highlighted_text": highlighted,
+                    "edition": row["edition_identifier"],
+                    "language": row["language"]
+                })
+
+        elif language == 'en':
+            # English search
+            where_clause = "WHERE fts_english MATCH ?"
+            params = [normalized_query]
+
+            # Add filters
+            if edition:
+                cursor.execute("SELECT id FROM editions WHERE identifier = ?", (edition,))
+                edition_row = cursor.fetchone()
+                if edition_row:
+                    where_clause += " AND f.edition_id = ?"
+                    params.append(edition_row[0])
+
+            if surah_id:
+                where_clause += " AND f.surah_id = ?"
+                params.append(surah_id)
+
+            # Get total count
+            count_sql = f"SELECT COUNT(*) FROM fts_english f {where_clause}"
+            cursor.execute(count_sql, params)
+            total_count = cursor.fetchone()[0]
+
+            # Get results with pagination
+            sql = f"""
+                SELECT
+                    f.ayah_id,
+                    f.ayah_number,
+                    f.surah_id,
+                    f.number_in_surah,
+                    f.text,
+                    f.edition_id,
+                    e.identifier as edition_identifier,
+                    e.language,
+                    e.name as edition_name,
+                    s.name as surah_name,
+                    s.english_name as surah_english_name,
+                    s.english_name_translation
+                FROM fts_english f
+                JOIN editions e ON f.edition_id = e.id
+                JOIN surahs s ON f.surah_id = s.id
+                {where_clause}
+                ORDER BY f.ayah_number
+                LIMIT ? OFFSET ?
+            """
+            cursor.execute(sql, params + [limit, offset])
+            rows = cursor.fetchall()
+
+            for row in rows:
+                highlighted = highlight_match(row["text"], normalized_query, language='en')
+                results.append({
+                    "ayah_number": row["ayah_number"],
+                    "surah_id": row["surah_id"],
+                    "number_in_surah": row["number_in_surah"],
+                    "surah_name": get_row_value(row, "surah_name"),
+                    "surah_english_name": get_row_value(row, "surah_english_name"),
+                    "surah_english_name_translation": get_row_value(row, "surah_english_name_translation"),
+                    "text": row["text"],
+                    "highlighted_text": highlighted,
+                    "edition": row["edition_identifier"],
+                    "edition_name": get_row_value(row, "edition_name"),
+                    "language": row["language"]
+                })
+
+        else:  # language == 'all' or search both
+            # Search both Arabic and English
+            # This is a simplified version - searches both and combines results
+            arabic_where = "WHERE fts_arabic MATCH ?"
+            english_where = "WHERE fts_english MATCH ?"
+            arabic_params = [normalized_query]
+            english_params = [normalized_query]
+
+            # Add filters
+            if edition:
+                cursor.execute("SELECT id FROM editions WHERE identifier = ?", (edition,))
+                edition_row = cursor.fetchone()
+                if edition_row:
+                    arabic_where += " AND f.edition_id = ?"
+                    english_where += " AND f.edition_id = ?"
+                    arabic_params.append(edition_row[0])
+                    english_params.append(edition_row[0])
+
+            if surah_id:
+                arabic_where += " AND f.surah_id = ?"
+                english_where += " AND f.surah_id = ?"
+                arabic_params.append(surah_id)
+                english_params.append(surah_id)
+
+            # Arabic results
+            arabic_sql = f"""
+                SELECT
+                    f.ayah_id,
+                    f.ayah_number,
+                    f.surah_id,
+                    f.number_in_surah,
+                    f.text,
+                    f.edition_id,
+                    e.identifier as edition_identifier,
+                    e.language,
+                    s.name as surah_name,
+                    s.english_name as surah_english_name,
+                    s.english_name_translation
+                FROM fts_arabic f
+                JOIN editions e ON f.edition_id = e.id
+                JOIN surahs s ON f.surah_id = s.id
+                {arabic_where}
+                ORDER BY f.ayah_number
+                LIMIT ?
+            """
+            cursor.execute(arabic_sql, arabic_params + [limit])
+            arabic_rows = cursor.fetchall()
+
+            for row in arabic_rows:
+                highlighted = highlight_match(row["text"], normalized_query, language='ar')
+                results.append({
+                    "ayah_number": row["ayah_number"],
+                    "surah_id": row["surah_id"],
+                    "number_in_surah": row["number_in_surah"],
+                    "surah_name": get_row_value(row, "surah_name"),
+                    "surah_english_name": get_row_value(row, "surah_english_name"),
+                    "surah_english_name_translation": get_row_value(row, "surah_english_name_translation"),
+                    "text": row["text"],
+                    "highlighted_text": highlighted,
+                    "edition": row["edition_identifier"],
+                    "language": row["language"]
+                })
+
+            # English results
+            remaining = limit - len(results)
+            if remaining > 0:
+                english_sql = f"""
+                    SELECT
+                        f.ayah_id,
+                        f.ayah_number,
+                        f.surah_id,
+                        f.number_in_surah,
+                        f.text,
+                        f.edition_id,
+                        e.identifier as edition_identifier,
+                        e.language,
+                        e.name as edition_name,
+                        s.name as surah_name,
+                        s.english_name as surah_english_name,
+                        s.english_name_translation
+                    FROM fts_english f
+                    JOIN editions e ON f.edition_id = e.id
+                    JOIN surahs s ON f.surah_id = s.id
+                    {english_where}
+                    ORDER BY f.ayah_number
+                    LIMIT ?
+                """
+                cursor.execute(english_sql, english_params + [remaining])
+                english_rows = cursor.fetchall()
+
+                for row in english_rows:
+                    highlighted = highlight_match(row["text"], normalized_query, language='en')
+                    results.append({
+                        "ayah_number": row["ayah_number"],
+                        "surah_id": row["surah_id"],
+                        "number_in_surah": row["number_in_surah"],
+                        "surah_name": get_row_value(row, "surah_name"),
+                        "surah_english_name": get_row_value(row, "surah_english_name"),
+                        "surah_english_name_translation": get_row_value(row, "surah_english_name_translation"),
+                        "text": row["text"],
+                        "highlighted_text": highlighted,
+                        "edition": row["edition_identifier"],
+                        "edition_name": get_row_value(row, "edition_name"),
+                        "language": row["language"]
+                    })
+
+            total_count = len(results)
+
+        return {
+            "query": q,
+            "language": language,
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "results": results
+        }
+
+    finally:
+        conn.close()
+
+
+def get_row_value(row, key, default=""):
+    """Safely get a value from a sqlite3.Row object with a default."""
+    try:
+        value = row[key]
+        return value if value is not None else default
+    except (KeyError, IndexError):
+        return default
+
+
+def highlight_match(text: str, query: str, language: str = 'en') -> str:
+    """
+    Highlight matching terms in the text.
+
+    For now, returns the original text.
+    A more sophisticated implementation would use FTS5's highlight function
+    or implement custom highlighting in Python.
+    """
+    # TODO: Implement proper highlighting using FTS5 snippet/bm25highlight functions
+    # or regex-based matching for search terms
+    return text
+
+
 # =============================================================================
 # AUTH ENDPOINTS (Supabase)
 # =============================================================================
@@ -420,6 +797,64 @@ async def reset_password(data: ResetPasswordRequest):
         raise HTTPException(status_code=400, detail="Failed to reset password. The link may have expired.")
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: Optional[str] = None  # Optional for Google users setting password for first time
+    new_password: str
+
+
+@app.post("/api/auth/change-password")
+async def change_password(data: ChangePasswordRequest, current_user: dict = Depends(get_current_user_with_token)):
+    """
+    Change password for an authenticated user.
+
+    For users who signed up with email/password:
+    - Requires current password to verify
+
+    For Google OAuth users:
+    - Can set a password without current password (leave it empty)
+    - Allows signing in with either Google OR email/password afterward
+    """
+    try:
+        access_token = current_user.get("access_token")
+        if not access_token:
+            raise HTTPException(status_code=400, detail="No session token available")
+
+        # Verify current password if provided (for users with existing passwords)
+        if data.current_password:
+            try:
+                # Try to sign in with the current password to verify it
+                verify_response = supabase.auth.sign_in_with_password({
+                    "email": current_user["email"],
+                    "password": data.current_password
+                })
+            except Exception:
+                raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+        # Update the user's password using their access token
+        auth_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        auth_client.auth.set_session(access_token, access_token)
+
+        update_response = auth_client.auth.update_user({
+            "password": data.new_password
+        })
+
+        if update_response.user:
+            return {
+                "success": True,
+                "message": "Password updated successfully. You can now sign in with your email and password."
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to update password")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Change password error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"Failed to change password: {str(e)}")
+
+
 class OAuthCallbackRequest(BaseModel):
     provider: str
     access_token: str
@@ -437,6 +872,8 @@ async def oauth_callback(data: OAuthCallbackRequest):
     - All existing data (bookmarks, progress, etc.) is preserved.
     """
     try:
+        print(f"OAuth callback received: provider={data.provider}, has_access_token={bool(data.access_token)}, has_refresh_token={bool(data.refresh_token)}")
+
         if data.provider != "google":
             raise HTTPException(status_code=400, detail="Unsupported provider")
 
@@ -445,21 +882,30 @@ async def oauth_callback(data: OAuthCallbackRequest):
         auth_client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
         # Set the session using the OAuth tokens
+        print("Setting session with OAuth tokens...")
         auth_client.auth.set_session(data.access_token, data.refresh_token)
 
         # Get the user to verify the session is valid
+        print("Getting user from Supabase...")
         user_response = auth_client.auth.get_user()
+        print(f"User response: {user_response}")
+
         if not user_response or not user_response.user:
+            print("ERROR: Invalid OAuth tokens - no user returned")
             raise HTTPException(status_code=401, detail="Invalid OAuth tokens")
 
         oauth_user_id = user_response.user.id
         oauth_email = user_response.user.email
+        print(f"OAuth user: id={oauth_user_id}, email={oauth_email}")
+
+        # Use admin client for profile operations (bypasses RLS)
+        profile_client = supabase_admin if supabase_admin else supabase
 
         # Check if there's an existing profile with this email (from email/password registration)
-        existing_profile = supabase.table("profiles").select("*").eq("email", oauth_email).execute()
+        existing_profile = profile_client.table("profiles").select("*").eq("email", oauth_email).execute()
 
         # Get or create profile for the OAuth user
-        oauth_profile = supabase.table("profiles").select("*").eq("id", oauth_user_id).execute()
+        oauth_profile = profile_client.table("profiles").select("*").eq("id", oauth_user_id).execute()
 
         user_name = ""
         user_email = oauth_email
@@ -476,10 +922,10 @@ async def oauth_callback(data: OAuthCallbackRequest):
                 # Check if OAuth profile already exists (might be created by Supabase)
                 if oauth_profile.data and len(oauth_profile.data) > 0:
                     # OAuth profile exists, migrate data from old profile to new one
-                    await _migrate_account_data(existing_user_id, oauth_user_id)
+                    await _migrate_account_data(existing_user_id, oauth_user_id, profile_client)
 
                     # Update OAuth profile with existing data (preserve name, etc.)
-                    supabase.table("profiles").update({
+                    profile_client.table("profiles").update({
                         "name": existing.get("name", ""),
                         "updated_at": datetime.now().isoformat()
                     }).eq("id", oauth_user_id).execute()
@@ -498,10 +944,10 @@ async def oauth_callback(data: OAuthCallbackRequest):
                         "name": existing.get("name", ""),
                         "created_at": datetime.now().isoformat()
                     }
-                    supabase.table("profiles").insert(new_profile).execute()
+                    profile_client.table("profiles").insert(new_profile).execute()
 
                     # Migrate data from old account to new OAuth account
-                    await _migrate_account_data(existing_user_id, oauth_user_id)
+                    await _migrate_account_data(existing_user_id, oauth_user_id, profile_client)
 
                     user_name = existing.get("name", "")
                     user_email = oauth_email
@@ -518,14 +964,18 @@ async def oauth_callback(data: OAuthCallbackRequest):
             user_email = oauth_profile.data[0].get("email", oauth_email)
         else:
             # No profile exists yet, create one
+            user_metadata_name = user_response.user.user_metadata.get("name", "") or user_response.user.user_metadata.get("full_name", "")
             new_profile = {
                 "id": oauth_user_id,
                 "email": oauth_email,
-                "name": user_response.user.user_metadata.get("name", "") or user_response.user.user_metadata.get("full_name", ""),
+                "name": user_metadata_name,
                 "created_at": datetime.now().isoformat()
             }
-            supabase.table("profiles").insert(new_profile).execute()
+            print(f"Creating new profile: {new_profile}")
+            profile_client.table("profiles").insert(new_profile).execute()
             user_name = new_profile["name"]
+
+        print(f"OAuth callback successful: user_id={oauth_user_id}, email={user_email}, name={user_name}")
 
         return {
             "user": {
@@ -547,7 +997,7 @@ async def oauth_callback(data: OAuthCallbackRequest):
         raise HTTPException(status_code=401, detail="OAuth authentication failed")
 
 
-async def _migrate_account_data(from_user_id: str, to_user_id: str):
+async def _migrate_account_data(from_user_id: str, to_user_id: str, client: Client = None):
     """
     Migrate all user data from one account to another during account merge.
 
@@ -560,12 +1010,15 @@ async def _migrate_account_data(from_user_id: str, to_user_id: str):
     - replay_stats
     - quran_play_sessions
     """
+    # Use admin client if provided, otherwise use default client
+    migration_client = client if client else supabase
+
     # Migrate bookmarks
-    existing_bookmarks = supabase.table("bookmarks").select("*").eq("user_id", from_user_id).execute()
+    existing_bookmarks = migration_client.table("bookmarks").select("*").eq("user_id", from_user_id).execute()
     if existing_bookmarks.data:
         for bm in existing_bookmarks.data:
             try:
-                supabase.table("bookmarks").insert({
+                migration_client.table("bookmarks").insert({
                     "user_id": to_user_id,
                     "ayah_id": bm["ayah_id"],
                     "surah_id": bm["surah_id"],
@@ -576,11 +1029,11 @@ async def _migrate_account_data(from_user_id: str, to_user_id: str):
                 pass  # Duplicate bookmarks are ok
 
     # Migrate reading_progress
-    existing_progress = supabase.table("reading_progress").select("*").eq("user_id", from_user_id).execute()
+    existing_progress = migration_client.table("reading_progress").select("*").eq("user_id", from_user_id).execute()
     if existing_progress.data:
         for p in existing_progress.data:
             try:
-                supabase.table("reading_progress").insert({
+                migration_client.table("reading_progress").insert({
                     "user_id": to_user_id,
                     "surah_id": p["surah_id"],
                     "last_read_ayah_id": p["last_read_ayah_id"],
@@ -594,11 +1047,11 @@ async def _migrate_account_data(from_user_id: str, to_user_id: str):
                 pass
 
     # Migrate daily_readings
-    existing_daily = supabase.table("daily_readings").select("*").eq("user_id", from_user_id).execute()
+    existing_daily = migration_client.table("daily_readings").select("*").eq("user_id", from_user_id).execute()
     if existing_daily.data:
         for d in existing_daily.data:
             try:
-                supabase.table("daily_readings").insert({
+                migration_client.table("daily_readings").insert({
                     "user_id": to_user_id,
                     "read_date": d["read_date"],
                     "ayahs_read": d["ayahs_read"]
@@ -607,11 +1060,11 @@ async def _migrate_account_data(from_user_id: str, to_user_id: str):
                 pass
 
     # Migrate completed_ayahs
-    existing_completed = supabase.table("completed_ayahs").select("*").eq("user_id", from_user_id).execute()
+    existing_completed = migration_client.table("completed_ayahs").select("*").eq("user_id", from_user_id).execute()
     if existing_completed.data:
         for c in existing_completed.data:
             try:
-                supabase.table("completed_ayahs").insert({
+                migration_client.table("completed_ayahs").insert({
                     "user_id": to_user_id,
                     "ayah_id": c["ayah_id"],
                     "surah_id": c["surah_id"],
@@ -623,11 +1076,11 @@ async def _migrate_account_data(from_user_id: str, to_user_id: str):
                 pass
 
     # Migrate play_sessions
-    existing_sessions = supabase.table("play_sessions").select("*").eq("user_id", from_user_id).execute()
+    existing_sessions = migration_client.table("play_sessions").select("*").eq("user_id", from_user_id).execute()
     if existing_sessions.data:
         for s in existing_sessions.data:
             try:
-                supabase.table("play_sessions").insert({
+                migration_client.table("play_sessions").insert({
                     "user_id": to_user_id,
                     "ayah_id": s["ayah_id"],
                     "surah_id": s["surah_id"],
@@ -641,11 +1094,11 @@ async def _migrate_account_data(from_user_id: str, to_user_id: str):
                 pass
 
     # Migrate replay_stats
-    existing_replay = supabase.table("replay_stats").select("*").eq("user_id", from_user_id).execute()
+    existing_replay = migration_client.table("replay_stats").select("*").eq("user_id", from_user_id).execute()
     if existing_replay.data:
         for r in existing_replay.data:
             try:
-                supabase.table("replay_stats").insert({
+                migration_client.table("replay_stats").insert({
                     "user_id": to_user_id,
                     "ayah_id": r["ayah_id"],
                     "play_count": r["play_count"],
@@ -656,11 +1109,11 @@ async def _migrate_account_data(from_user_id: str, to_user_id: str):
                 pass
 
     # Migrate quran_play_sessions
-    existing_quran_sessions = supabase.table("quran_play_sessions").select("*").eq("user_id", from_user_id).execute()
+    existing_quran_sessions = migration_client.table("quran_play_sessions").select("*").eq("user_id", from_user_id).execute()
     if existing_quran_sessions.data:
         for qs in existing_quran_sessions.data:
             try:
-                supabase.table("quran_play_sessions").insert({
+                migration_client.table("quran_play_sessions").insert({
                     "user_id": to_user_id,
                     "start_surah_id": qs["start_surah_id"],
                     "start_ayah_number": qs["start_ayah_number"],
@@ -684,8 +1137,9 @@ class BookmarkRequest(BaseModel):
 @app.get("/api/bookmarks")
 async def get_bookmarks(current_user: dict = Depends(get_current_user)):
     """Get all bookmarks for the current user."""
-    # Get bookmarks from Supabase
-    response = supabase.table("bookmarks").select("*").eq("user_id", current_user["id"]).order("created_at", desc=True).execute()
+    # Get bookmarks from Supabase (using admin client to bypass RLS)
+    client = supabase_admin or supabase
+    response = client.table("bookmarks").select("*").eq("user_id", current_user["id"]).order("created_at", desc=True).execute()
 
     if not response.data:
         return []
@@ -761,8 +1215,9 @@ async def create_bookmark(
     current_user: dict = Depends(get_current_user)
 ):
     """Create a new bookmark in Supabase."""
+    client = supabase_admin or supabase
     try:
-        response = supabase.table("bookmarks").insert({
+        response = client.table("bookmarks").insert({
             "user_id": current_user["id"],
             "ayah_id": data.ayah_id,
             "surah_id": data.surah_id,
@@ -778,14 +1233,16 @@ async def create_bookmark(
 @app.delete("/api/bookmarks/{bookmark_id}")
 async def delete_bookmark(bookmark_id: str, current_user: dict = Depends(get_current_user)):
     """Delete a bookmark from Supabase."""
-    supabase.table("bookmarks").delete().eq("id", bookmark_id).eq("user_id", current_user["id"]).execute()
+    client = supabase_admin or supabase
+    client.table("bookmarks").delete().eq("id", bookmark_id).eq("user_id", current_user["id"]).execute()
     return {"success": True}
 
 
 @app.get("/api/bookmarks/exists/{ayah_id}")
 async def check_bookmark(ayah_id: int, current_user: dict = Depends(get_current_user)):
     """Check if an ayah is bookmarked."""
-    response = supabase.table("bookmarks").select("id").eq("user_id", current_user["id"]).eq("ayah_id", ayah_id).execute()
+    client = supabase_admin or supabase
+    response = client.table("bookmarks").select("id").eq("user_id", current_user["id"]).eq("ayah_id", ayah_id).execute()
 
     bookmarked = len(response.data) > 0
     bookmark_id = response.data[0]["id"] if bookmarked else None
@@ -796,7 +1253,8 @@ async def check_bookmark(ayah_id: int, current_user: dict = Depends(get_current_
 @app.get("/api/bookmarks/surah/{surah_id}")
 async def get_bookmarks_for_surah(surah_id: int, current_user: dict = Depends(get_current_user)):
     """Get all bookmarks for a specific surah (batch endpoint). Returns map of ayah_id -> bookmark_id."""
-    response = supabase.table("bookmarks").select("ayah_id", "id").eq("user_id", current_user["id"]).eq("surah_id", surah_id).execute()
+    client = supabase_admin or supabase
+    response = client.table("bookmarks").select("ayah_id", "id").eq("user_id", current_user["id"]).eq("surah_id", surah_id).execute()
 
     return {bm["ayah_id"]: bm["id"] for bm in response.data}
 
@@ -817,14 +1275,15 @@ async def update_progress(
     current_user: dict = Depends(get_current_user)
 ):
     """Update reading progress for a surah in Supabase."""
+    client = supabase_admin or supabase
     today = datetime.now().strftime("%Y-%m-%d")
 
     # Check if progress exists
-    existing = supabase.table("reading_progress").select("*").eq("user_id", current_user["id"]).eq("surah_id", data.surah_id).execute()
+    existing = client.table("reading_progress").select("*").eq("user_id", current_user["id"]).eq("surah_id", data.surah_id).execute()
 
     if existing.data:
         # Update existing progress
-        supabase.table("reading_progress").update({
+        client.table("reading_progress").update({
             "last_read_ayah_id": data.ayah_id,
             "last_read_ayah_number": data.ayah_number,
             "last_read_date": today,
@@ -833,14 +1292,14 @@ async def update_progress(
 
         # Track daily reading if different ayah
         if existing.data[0]["last_read_ayah_id"] != data.ayah_id:
-            daily = supabase.table("daily_readings").select("*").eq("user_id", current_user["id"]).eq("read_date", today).execute()
+            daily = client.table("daily_readings").select("*").eq("user_id", current_user["id"]).eq("read_date", today).execute()
             if daily.data:
-                supabase.table("daily_readings").update({"ayahs_read": daily.data[0]["ayahs_read"] + 1}).eq("user_id", current_user["id"]).eq("read_date", today).execute()
+                client.table("daily_readings").update({"ayahs_read": daily.data[0]["ayahs_read"] + 1}).eq("user_id", current_user["id"]).eq("read_date", today).execute()
             else:
-                supabase.table("daily_readings").insert({"user_id": current_user["id"], "read_date": today, "ayahs_read": 1}).execute()
+                client.table("daily_readings").insert({"user_id": current_user["id"], "read_date": today, "ayahs_read": 1}).execute()
     else:
         # Create new progress record
-        supabase.table("reading_progress").insert({
+        client.table("reading_progress").insert({
             "user_id": current_user["id"],
             "surah_id": data.surah_id,
             "last_read_ayah_id": data.ayah_id,
@@ -850,11 +1309,11 @@ async def update_progress(
         }).execute()
 
         # Track daily reading
-        daily = supabase.table("daily_readings").select("*").eq("user_id", current_user["id"]).eq("read_date", today).execute()
+        daily = client.table("daily_readings").select("*").eq("user_id", current_user["id"]).eq("read_date", today).execute()
         if daily.data:
-            supabase.table("daily_readings").update({"ayahs_read": daily.data[0]["ayahs_read"] + 1}).eq("user_id", current_user["id"]).eq("read_date", today).execute()
+            client.table("daily_readings").update({"ayahs_read": daily.data[0]["ayahs_read"] + 1}).eq("user_id", current_user["id"]).eq("read_date", today).execute()
         else:
-            supabase.table("daily_readings").insert({"user_id": current_user["id"], "read_date": today, "ayahs_read": 1}).execute()
+            client.table("daily_readings").insert({"user_id": current_user["id"], "read_date": today, "ayahs_read": 1}).execute()
 
     return {"success": True}
 
@@ -862,8 +1321,11 @@ async def update_progress(
 @app.get("/api/progress")
 async def get_progress(current_user: dict = Depends(get_current_user)):
     """Get all reading progress for the current user."""
+    # Use admin client to bypass RLS since we've already verified the user
+    client = supabase_admin or supabase
+
     # Get progress from Supabase
-    response = supabase.table("reading_progress").select("*").eq("user_id", current_user["id"]).order("updated_at", desc=True).execute()
+    response = client.table("reading_progress").select("*").eq("user_id", current_user["id"]).order("updated_at", desc=True).execute()
 
     if not response.data:
         return []
@@ -903,20 +1365,22 @@ async def get_progress(current_user: dict = Depends(get_current_user)):
 @app.get("/api/progress/stats")
 async def get_progress_stats(current_user: dict = Depends(get_current_user)):
     """Get reading statistics for the current user from Supabase."""
+    client = supabase_admin or supabase
+
     # Total ayahs read
-    daily_response = supabase.table("daily_readings").select("ayahs_read").eq("user_id", current_user["id"]).execute()
+    daily_response = client.table("daily_readings").select("ayahs_read").eq("user_id", current_user["id"]).execute()
     total_ayahs = sum(d["ayahs_read"] for d in daily_response.data) if daily_response.data else 0
 
     # Total surahs with progress
-    progress_response = supabase.table("reading_progress").select("surah_id").eq("user_id", current_user["id"]).execute()
+    progress_response = client.table("reading_progress").select("surah_id").eq("user_id", current_user["id"]).execute()
     total_surahs = len(set(p["surah_id"] for p in progress_response.data)) if progress_response.data else 0
 
     # Total bookmarks
-    bookmarks_response = supabase.table("bookmarks").select("id").eq("user_id", current_user["id"]).execute()
+    bookmarks_response = client.table("bookmarks").select("id").eq("user_id", current_user["id"]).execute()
     total_bookmarks = len(bookmarks_response.data) if bookmarks_response.data else 0
 
     # Calculate reading streak
-    daily_dates_response = supabase.table("daily_readings").select("read_date").eq("user_id", current_user["id"]).order("read_date", desc=True).limit(365).execute()
+    daily_dates_response = client.table("daily_readings").select("read_date").eq("user_id", current_user["id"]).order("read_date", desc=True).limit(365).execute()
     streak = 0
 
     if daily_dates_response.data:
@@ -946,7 +1410,8 @@ async def get_progress_stats(current_user: dict = Depends(get_current_user)):
 @app.get("/api/progress/last-position")
 async def get_last_position(current_user: dict = Depends(get_current_user)):
     """Get the last reading position for resuming."""
-    response = supabase.table("reading_progress").select("*").eq("user_id", current_user["id"]).order("updated_at", desc=True).limit(1).execute()
+    client = supabase_admin or supabase
+    response = client.table("reading_progress").select("*").eq("user_id", current_user["id"]).order("updated_at", desc=True).limit(1).execute()
 
     if not response.data:
         return None
@@ -994,7 +1459,8 @@ async def mark_ayah_completed(
 ):
     """Mark an ayah as completed in Supabase."""
     try:
-        supabase.table("completed_ayahs").insert({
+        client = supabase_admin or supabase
+        client.table("completed_ayahs").insert({
             "user_id": current_user["id"],
             "ayah_id": data.ayah_id,
             "surah_id": data.surah_id,
@@ -1012,7 +1478,8 @@ async def get_completed_ayahs_for_surah(
     current_user: dict = Depends(get_current_user)
 ):
     """Get list of completed ayah IDs for a specific surah from Supabase."""
-    response = supabase.table("completed_ayahs").select("ayah_id", "ayah_number", "completed_at").eq("user_id", current_user["id"]).eq("surah_id", surah_id).order("ayah_number").execute()
+    client = supabase_admin or supabase
+    response = client.table("completed_ayahs").select("ayah_id", "ayah_number", "completed_at").eq("user_id", current_user["id"]).eq("surah_id", surah_id).order("ayah_number").execute()
     return response.data if response.data else []
 
 
@@ -1036,7 +1503,8 @@ async def get_surah_completion_stats(
         conn.close()
 
     # Get completed count from Supabase
-    completed_response = supabase.table("completed_ayahs").select("ayah_id", "ayah_number").eq("user_id", current_user["id"]).eq("surah_id", surah_id).execute()
+    client = supabase_admin or supabase
+    completed_response = client.table("completed_ayahs").select("ayah_id", "ayah_number").eq("user_id", current_user["id"]).eq("surah_id", surah_id).execute()
     completed_count = len(completed_response.data) if completed_response.data else 0
     completed_numbers = [c["ayah_number"] for c in completed_response.data] if completed_response.data else []
 
@@ -1071,7 +1539,8 @@ async def get_surah_completion_stats(
 async def get_first_unread_ayah(current_user: dict = Depends(get_current_user)):
     """Get the first unread ayah across all surahs (for global resume)."""
     # Get all completed ayahs from Supabase
-    completed_response = supabase.table("completed_ayahs").select("ayah_id").eq("user_id", current_user["id"]).execute()
+    client = supabase_admin or supabase
+    completed_response = client.table("completed_ayahs").select("ayah_id").eq("user_id", current_user["id"]).execute()
     completed_ayah_ids = [c["ayah_id"] for c in completed_response.data] if completed_response.data else []
 
     # Get first unread ayah from SQLite
@@ -1114,7 +1583,8 @@ async def get_overall_completion_stats(current_user: dict = Depends(get_current_
     total_quran_ayahs = 6236
 
     # Get completed ayahs count
-    completed_response = supabase.table("completed_ayahs").select("ayah_id").eq("user_id", current_user["id"]).execute()
+    client = supabase_admin or supabase
+    completed_response = client.table("completed_ayahs").select("ayah_id").eq("user_id", current_user["id"]).execute()
     completed_count = len(completed_response.data) if completed_response.data else 0
 
     # Get completed surahs count
@@ -1160,11 +1630,12 @@ async def get_sequential_progress(current_user: dict = Depends(get_current_user)
     Returns first incomplete ayah and accurate completion percentage.
     """
     # Get completed ayahs with is_sequential flag from Supabase
-    response = supabase.table("completed_ayahs").select("*").eq("user_id", current_user["id"]).eq("is_sequential", True).execute()
+    client = supabase_admin or supabase
+    response = client.table("completed_ayahs").select("*").eq("user_id", current_user["id"]).eq("is_sequential", True).execute()
     sequential_count = len(response.data) if response.data else 0
 
     # Get all completed ayah IDs
-    all_completed = supabase.table("completed_ayahs").select("ayah_id").eq("user_id", current_user["id"]).execute()
+    all_completed = client.table("completed_ayahs").select("ayah_id").eq("user_id", current_user["id"]).execute()
     completed_ayah_ids = [c["ayah_id"] for c in all_completed.data] if all_completed.data else []
 
     # Find first incomplete ayah from SQLite
@@ -1202,7 +1673,8 @@ async def validate_sequential_progress(current_user: dict = Depends(get_current_
     Recalculate sequential progress flags in Supabase.
     """
     # Get all completed ayahs
-    completed = supabase.table("completed_ayahs").select("ayah_id").eq("user_id", current_user["id"]).execute()
+    client = supabase_admin or supabase
+    completed = client.table("completed_ayahs").select("ayah_id").eq("user_id", current_user["id"]).execute()
     completed_ayah_ids = [c["ayah_id"] for c in completed.data] if completed.data else []
 
     # Get all ayahs in order from SQLite
@@ -1228,10 +1700,10 @@ async def validate_sequential_progress(current_user: dict = Depends(get_current_
                     sequential_ids.append(ayah["id"])
 
         # Reset all sequential flags and update
-        supabase.table("completed_ayahs").update({"is_sequential": False}).eq("user_id", current_user["id"]).execute()
+        client.table("completed_ayahs").update({"is_sequential": False}).eq("user_id", current_user["id"]).execute()
 
         for ayah_id in sequential_ids:
-            supabase.table("completed_ayahs").update({"is_sequential": True}).eq("user_id", current_user["id"]).eq("ayah_id", ayah_id).execute()
+            client.table("completed_ayahs").update({"is_sequential": True}).eq("user_id", current_user["id"]).eq("ayah_id", ayah_id).execute()
 
         return {"success": True}
     finally:
@@ -1256,7 +1728,8 @@ class PlaySessionEnd(BaseModel):
 @app.post("/api/analytics/play-start")
 async def start_play_session(data: PlaySessionStart, current_user: dict = Depends(get_current_user)):
     """Track when user starts playing an ayah in Supabase."""
-    response = supabase.table("play_sessions").insert({
+    client = supabase_admin or supabase
+    response = client.table("play_sessions").insert({
         "user_id": current_user["id"],
         "ayah_id": data.ayah_id,
         "surah_id": data.surah_id,
@@ -1271,7 +1744,8 @@ async def start_play_session(data: PlaySessionStart, current_user: dict = Depend
 async def end_play_session(data: PlaySessionEnd, current_user: dict = Depends(get_current_user)):
     """Track when user finishes playing an ayah (updates duration)."""
     # Get session to find ayah_id
-    session = supabase.table("play_sessions").select("ayah_id").eq("id", data.session_id).eq("user_id", current_user["id"]).execute()
+    client = supabase_admin or supabase
+    session = client.table("play_sessions").select("ayah_id").eq("id", data.session_id).eq("user_id", current_user["id"]).execute()
 
     if not session.data:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -1279,22 +1753,22 @@ async def end_play_session(data: PlaySessionEnd, current_user: dict = Depends(ge
     ayah_id = session.data[0]["ayah_id"]
 
     # Update play session
-    supabase.table("play_sessions").update({
+    client.table("play_sessions").update({
         "completed_at": datetime.now().isoformat(),
         "duration_seconds": data.duration_seconds
     }).eq("id", data.session_id).execute()
 
     # Update replay stats in Supabase
-    existing = supabase.table("replay_stats").select("*").eq("user_id", current_user["id"]).eq("ayah_id", ayah_id).execute()
+    existing = client.table("replay_stats").select("*").eq("user_id", current_user["id"]).eq("ayah_id", ayah_id).execute()
 
     if existing.data:
-        supabase.table("replay_stats").update({
+        client.table("replay_stats").update({
             "play_count": existing.data[0]["play_count"] + 1,
             "total_duration_seconds": existing.data[0]["total_duration_seconds"] + data.duration_seconds,
             "last_played_at": datetime.now().isoformat()
         }).eq("user_id", current_user["id"]).eq("ayah_id", ayah_id).execute()
     else:
-        supabase.table("replay_stats").insert({
+        client.table("replay_stats").insert({
             "user_id": current_user["id"],
             "ayah_id": ayah_id,
             "play_count": 1,
@@ -1308,7 +1782,8 @@ async def end_play_session(data: PlaySessionEnd, current_user: dict = Depends(ge
 @app.get("/api/analytics/replay-stats")
 async def get_replay_stats_endpoint(current_user: dict = Depends(get_current_user), limit: int = 10):
     """Get most replayed ayahs (highest play count) from Supabase."""
-    response = supabase.table("replay_stats").select("*").eq("user_id", current_user["id"]).order("play_count", desc=True).limit(limit).execute()
+    client = supabase_admin or supabase
+    response = client.table("replay_stats").select("*").eq("user_id", current_user["id"]).order("play_count", desc=True).limit(limit).execute()
 
     if not response.data:
         return []
@@ -1352,7 +1827,8 @@ async def get_replay_stats_endpoint(current_user: dict = Depends(get_current_use
 async def start_quran_play(current_user: dict = Depends(get_current_user)):
     """Start a full Quran play session from first incomplete ayah."""
     # Get all completed ayah IDs from Supabase
-    completed = supabase.table("completed_ayahs").select("ayah_id").eq("user_id", current_user["id"]).execute()
+    client = supabase_admin or supabase
+    completed = client.table("completed_ayahs").select("ayah_id").eq("user_id", current_user["id"]).execute()
     completed_ayah_ids = [c["ayah_id"] for c in completed.data] if completed.data else []
 
     # Get first incomplete ayah from SQLite
@@ -1377,7 +1853,7 @@ async def start_quran_play(current_user: dict = Depends(get_current_user)):
         start_ayah = result["ayah_num"] if result and result["ayah_num"] else 1
 
         # Create session in Supabase
-        response = supabase.table("quran_play_sessions").insert({
+        response = client.table("quran_play_sessions").insert({
             "user_id": current_user["id"],
             "start_surah_id": start_surah,
             "start_ayah_number": start_ayah
@@ -1452,7 +1928,8 @@ def get_next_quran_ayah(surah_id: int, ayah_number: int):
 @app.post("/api/quran-play/end/{session_id}")
 async def end_quran_play_endpoint(session_id: str, current_user: dict = Depends(get_current_user)):
     """End a Quran play session in Supabase."""
-    supabase.table("quran_play_sessions").update({
+    client = supabase_admin or supabase
+    client.table("quran_play_sessions").update({
         "ended_at": datetime.now().isoformat()
     }).eq("id", session_id).eq("user_id", current_user["id"]).execute()
 
@@ -1671,6 +2148,374 @@ def get_ayah_share_image_by_id(
 
     finally:
         conn.close()
+
+
+# =============================================================================
+# USER STATS SHARING ENDPOINTS
+# =============================================================================
+
+class ShareSettingsRequest(BaseModel):
+    theme: Optional[str] = None
+    show_reading_progress: Optional[bool] = None
+    show_completion: Optional[bool] = None
+    show_streak: Optional[bool] = None
+    show_bookmarks: Optional[bool] = None
+    show_listening_stats: Optional[bool] = None
+
+
+@app.post("/api/share/generate")
+async def generate_share_profile(current_user: dict = Depends(get_current_user)):
+    """
+    Generate a new share profile for the authenticated user.
+    Creates a unique 8-character share_id if one doesn't exist.
+    """
+    # Check if user already has a share profile
+    client = supabase_admin or supabase
+    existing = client.table("share_profiles").select("*").eq("user_id", current_user["id"]).execute()
+
+    if existing.data:
+        # Return existing share profile
+        share_id = existing.data[0]["share_id"]
+        share_url = f"https://quran.hyperflash.uk/share/{share_id}"
+        return {
+            "share_id": share_id,
+            "share_url": share_url,
+            "theme": existing.data[0].get("theme", "classic"),
+            "created_at": existing.data[0].get("created_at")
+        }
+
+    # Create new share profile (share_id will be auto-generated by trigger)
+    response = client.table("share_profiles").insert({
+        "user_id": current_user["id"],
+        "theme": "classic",
+        "show_reading_progress": True,
+        "show_completion": True,
+        "show_streak": True,
+        "show_bookmarks": False,
+        "show_listening_stats": False
+    }).execute()
+
+    if not response.data:
+        raise HTTPException(status_code=500, detail="Failed to create share profile")
+
+    share_id = response.data[0]["share_id"]
+    share_url = f"https://quran.hyperflash.uk/share/{share_id}"
+
+    return {
+        "share_id": share_id,
+        "share_url": share_url,
+        "theme": response.data[0].get("theme", "classic"),
+        "created_at": response.data[0].get("created_at")
+    }
+
+
+@app.get("/api/share/settings")
+async def get_share_settings(current_user: dict = Depends(get_current_user)):
+    """
+    Get the current user's share profile settings.
+    Returns null if no share profile exists.
+    """
+    client = supabase_admin or supabase
+    response = client.table("share_profiles").select("*").eq("user_id", current_user["id"]).execute()
+
+    if not response.data:
+        return None
+
+    profile = response.data[0]
+    return {
+        "share_id": profile["share_id"],
+        "share_url": f"https://quran.hyperflash.uk/share/{profile['share_id']}",
+        "theme": profile.get("theme", "classic"),
+        "show_reading_progress": profile.get("show_reading_progress", True),
+        "show_completion": profile.get("show_completion", True),
+        "show_streak": profile.get("show_streak", True),
+        "show_bookmarks": profile.get("show_bookmarks", False),
+        "show_listening_stats": profile.get("show_listening_stats", False),
+        "created_at": profile.get("created_at"),
+        "updated_at": profile.get("updated_at")
+    }
+
+
+@app.put("/api/share/settings")
+async def update_share_settings(
+    data: ShareSettingsRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Update the current user's share profile settings.
+    Creates a new profile if one doesn't exist.
+    """
+    client = supabase_admin or supabase
+
+    # Check if profile exists
+    existing = client.table("share_profiles").select("*").eq("user_id", current_user["id"]).execute()
+
+    # Build update dict with only provided fields
+    update_data = {}
+    if data.theme is not None:
+        if data.theme not in ["classic", "nature", "dark", "minimal"]:
+            raise HTTPException(status_code=400, detail="Invalid theme. Must be: classic, nature, dark, or minimal")
+        update_data["theme"] = data.theme
+    if data.show_reading_progress is not None:
+        update_data["show_reading_progress"] = data.show_reading_progress
+    if data.show_completion is not None:
+        update_data["show_completion"] = data.show_completion
+    if data.show_streak is not None:
+        update_data["show_streak"] = data.show_streak
+    if data.show_bookmarks is not None:
+        update_data["show_bookmarks"] = data.show_bookmarks
+    if data.show_listening_stats is not None:
+        update_data["show_listening_stats"] = data.show_listening_stats
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    if existing.data:
+        # Update existing profile
+        response = client.table("share_profiles").update(update_data).eq("user_id", current_user["id"]).execute()
+        share_id = existing.data[0]["share_id"]
+    else:
+        # Create new profile
+        update_data["user_id"] = current_user["id"]
+        response = client.table("share_profiles").insert(update_data).execute()
+        share_id = response.data[0]["share_id"] if response.data else None
+
+    if not response.data and existing.data:
+        # Update might return no data on success, fetch the profile
+        profile = client.table("share_profiles").select("*").eq("user_id", current_user["id"]).execute()
+        share_id = profile.data[0]["share_id"] if profile.data else None
+
+    return {
+        "success": True,
+        "share_id": share_id,
+        "share_url": f"https://quran.hyperflash.uk/share/{share_id}" if share_id else None
+    }
+
+
+@app.get("/api/share/{share_id}")
+async def get_public_share_stats(share_id: str):
+    """
+    Get public stats for a share profile.
+    This endpoint does NOT require authentication.
+    Returns user stats based on their share settings.
+    """
+    client = supabase_admin or supabase
+
+    # Use the Supabase function to get stats
+    try:
+        response = client.table("share_profiles").select(
+            "user_id",
+            "theme",
+            "show_reading_progress",
+            "show_completion",
+            "show_streak",
+            "show_bookmarks",
+            "show_listening_stats"
+        ).eq("share_id", share_id).single().execute()
+    except Exception:
+        raise HTTPException(status_code=404, detail="Share profile not found")
+
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Share profile not found")
+
+    profile = response.data
+    user_id = profile["user_id"]
+
+    # Get user profile info (name, created_at)
+    user_profile = client.table("profiles").select("name", "created_at").eq("id", user_id).single().execute()
+
+    if not user_profile.data:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    result = {
+        "user": {
+            "name": user_profile.data.get("name", ""),
+            "member_since": user_profile.data.get("created_at")
+        },
+        "theme": profile.get("theme", "classic"),
+        "stats": {}
+    }
+
+    # Get stats based on visibility settings
+    if profile.get("show_reading_progress") or profile.get("show_completion"):
+        # Total ayahs read
+        daily_response = client.table("daily_readings").select("ayahs_read").eq("user_id", user_id).execute()
+        total_ayahs = sum(d["ayahs_read"] for d in daily_response.data) if daily_response.data else 0
+
+        # Total surahs with progress
+        progress_response = client.table("reading_progress").select("surah_id").eq("user_id", user_id).execute()
+        total_surahs = len(set(p["surah_id"] for p in progress_response.data)) if progress_response.data else 0
+
+        result["stats"]["reading"] = {
+            "total_ayahs_read": total_ayahs,
+            "total_surahs_read": total_surahs
+        }
+
+    if profile.get("show_completion"):
+        # Completion stats
+        completed_response = client.table("completed_ayahs").select("ayah_id", "surah_id").eq("user_id", user_id).execute()
+        completed_count = len(completed_response.data) if completed_response.data else 0
+        completion_percentage = round((completed_count / 6236) * 100, 1) if completed_count > 0 else 0
+
+        # Count fully completed surahs
+        conn = get_db_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, number_of_ayahs FROM surahs")
+            all_surahs = cursor.fetchall()
+
+            completed_surahs = 0
+            if completed_response.data:
+                surah_completion = {}
+                for c in completed_response.data:
+                    surah_id = c["surah_id"]
+                    if surah_id not in surah_completion:
+                        surah_completion[surah_id] = 0
+                    surah_completion[surah_id] += 1
+
+                for surah in all_surahs:
+                    if surah_completion.get(surah["id"], 0) >= surah["number_of_ayahs"]:
+                        completed_surahs += 1
+        finally:
+            conn.close()
+
+        result["stats"]["completion"] = {
+            "completion_percentage": completion_percentage,
+            "ayahs_completed": completed_count,
+            "surahs_completed": completed_surahs
+        }
+
+    if profile.get("show_streak"):
+        # Calculate reading streak
+        daily_dates_response = client.table("daily_readings").select("read_date").eq("user_id", user_id).order("read_date", desc=True).limit(365).execute()
+        streak = 0
+
+        if daily_dates_response.data:
+            dates = sorted(list(set(d["read_date"] for d in daily_dates_response.data)), reverse=True)
+            today = datetime.now().strftime("%Y-%m-%d")
+            yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+            if dates and (dates[0] == today or dates[0] == yesterday):
+                streak = 1
+                expected_date = (datetime.now() - timedelta(days=1 if dates[0] == today else 2)).strftime("%Y-%m-%d")
+
+                for date in dates[1:]:
+                    if date == expected_date:
+                        streak += 1
+                        expected_date = (datetime.strptime(expected_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+                    else:
+                        break
+
+        result["stats"]["streak"] = streak
+
+    if profile.get("show_bookmarks"):
+        # Get bookmarks count
+        bookmarks_response = client.table("bookmarks").select("id").eq("user_id", user_id).execute()
+        result["stats"]["bookmarks"] = len(bookmarks_response.data) if bookmarks_response.data else 0
+
+    if profile.get("show_listening_stats"):
+        # Get listening stats
+        replay_response = client.table("replay_stats").select("play_count", "total_duration_seconds").eq("user_id", user_id).execute()
+
+        total_plays = 0
+        total_seconds = 0
+
+        if replay_response.data:
+            for r in replay_response.data:
+                total_plays += r.get("play_count", 0)
+                total_seconds += r.get("total_duration_seconds", 0)
+
+        result["stats"]["listening"] = {
+            "total_plays": total_plays,
+            "total_minutes": round(total_seconds / 60) if total_seconds > 0 else 0
+        }
+
+    return result
+
+
+@app.get("/api/share/og/{share_id}.png")
+async def get_share_og_image(share_id: str):
+    """
+    Generate an Open Graph image for a share profile.
+    Returns a beautiful image for social media previews.
+    """
+    from share_image import generate_share_profile_image_bytes
+
+    client = supabase_admin or supabase
+
+    # Fetch share profile and stats
+    try:
+        profile_response = client.table("share_profiles").select(
+            "user_id", "theme"
+        ).eq("share_id", share_id).single().execute()
+    except Exception:
+        raise HTTPException(status_code=404, detail="Share profile not found")
+
+    if not profile_response.data:
+        raise HTTPException(status_code=404, detail="Share profile not found")
+
+    user_id = profile_response.data["user_id"]
+    theme = profile_response.data.get("theme", "classic")
+
+    # Get user profile
+    user_profile = client.table("profiles").select("name").eq("id", user_id).single().execute()
+
+    if not user_profile.data:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user_name = user_profile.data.get("name", "Quran Reader")
+
+    # Get key stats for the image
+    # Completion %
+    completed_response = client.table("completed_ayahs").select("ayah_id").eq("user_id", user_id).execute()
+    completed_count = len(completed_response.data) if completed_response.data else 0
+    completion_pct = round((completed_count / 6236) * 100, 1) if completed_count > 0 else 0
+
+    # Streak
+    daily_dates_response = client.table("daily_readings").select("read_date").eq("user_id", user_id).order("read_date", desc=True).limit(365).execute()
+    streak = 0
+    if daily_dates_response.data:
+        dates = sorted(list(set(d["read_date"] for d in daily_dates_response.data)), reverse=True)
+        today = datetime.now().strftime("%Y-%m-%d")
+        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        if dates and (dates[0] == today or dates[0] == yesterday):
+            streak = 1
+            expected_date = (datetime.now() - timedelta(days=1 if dates[0] == today else 2)).strftime("%Y-%m-%d")
+            for date in dates[1:]:
+                if date == expected_date:
+                    streak += 1
+                    expected_date = (datetime.strptime(expected_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+                else:
+                    break
+
+    # Total ayahs
+    daily_response = client.table("daily_readings").select("ayahs_read").eq("user_id", user_id).execute()
+    total_ayahs = sum(d["ayahs_read"] for d in daily_response.data) if daily_response.data else 0
+
+    # Generate image
+    try:
+        image_bytes = generate_share_profile_image_bytes(
+            user_name=user_name,
+            completion_percentage=completion_pct,
+            streak=streak,
+            total_ayahs=total_ayahs,
+            theme=theme,
+            format="PNG"
+        )
+    except Exception as e:
+        print(f"Error generating share image: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Failed to generate image")
+
+    return Response(
+        content=image_bytes,
+        media_type="image/png",
+        headers={
+            "Content-Disposition": f'inline; filename="{share_id}.png"',
+            "Cache-Control": "public, max-age=3600",  # Cache for 1 hour
+        }
+    )
 
 
 if __name__ == "__main__":

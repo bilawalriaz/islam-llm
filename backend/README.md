@@ -57,6 +57,30 @@ When the server is running, visit:
 - `POST /api/auth/logout` - Logout
 - `GET /api/auth/me` - Get current user
 
+### Share Profile Endpoints
+
+- `POST /api/share/generate` - Generate a new share profile for authenticated user (creates unique share_id)
+- `GET /api/share/settings` - Get current user's share profile settings
+- `PUT /api/share/settings` - Update share profile settings (theme, privacy toggles)
+- `GET /api/share/{share_id}` - Get public stats for a share profile (no auth required)
+- `GET /api/share/og/{share_id}.png` - Generate Open Graph image for social sharing
+
+### Share Profile Features
+
+- **Unique Share URLs**: Each user gets a unique 8-character share_id (e.g., `/share/a7x2k9`)
+- **Privacy Controls**: Users can toggle which stats to display:
+  - Completion percentage and ayahs completed
+  - Reading progress (ayahs/surahs read)
+  - Reading streak
+  - Bookmarks count
+  - Listening stats (plays, minutes)
+- **Theme Selection**: Four visual themes for share profiles:
+  - `classic` - Warm orange gradient
+  - `dark` - Dark slate with accents
+  - `minimal` - Clean white/gray
+  - `nature` - Nature backgrounds
+- **Social Sharing**: OG image generation for sharing on social media
+
 ## CORS Configuration
 
 The backend is configured to allow CORS from:
@@ -73,7 +97,10 @@ To add more origins, edit the `CORSMiddleware` configuration in `main.py`.
 ```
 backend/
 ├── main.py           # FastAPI application with all endpoints
-├── requirements.txt  # Python dependencies (fastapi, uvicorn)
+├── share_image.py    # Image generation for share profiles and ayah cards
+├── requirements.txt  # Python dependencies (fastapi, uvicorn, PIL, etc.)
+├── migrations/       # Database migrations for Supabase
+│   └── 006_create_share_profiles.sql  # Share profiles table with RLS
 └── README.md         # This file
 ```
 

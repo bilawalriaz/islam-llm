@@ -12,6 +12,9 @@ import Progress from './pages/Progress'
 import Analytics from './pages/Analytics'
 import QuranHome from './pages/QuranHome'
 import SurahDetail from './pages/SurahDetail'
+import SearchPage from './pages/SearchPage'
+import SharedProfile from './pages/SharedProfile'
+import ShareSettings from './pages/ShareSettings'
 
 /**
  * ProtectedRoute - Wrapper that redirects to login if not authenticated
@@ -105,7 +108,11 @@ function AppRoutes() {
                 <Route index element={<Home />} />
                 <Route path="quran" element={<QuranHome />} />
                 <Route path="quran/:id" element={<SurahDetail />} />
+                <Route path="search" element={<SearchPage />} />
             </Route>
+
+            {/* Public share profile route - no auth required, no layout */}
+            <Route path="/share/:shareId" element={<SharedProfile />} />
 
             {/* Protected routes - require authentication for account features */}
             <Route
@@ -142,6 +149,18 @@ function AppRoutes() {
                 }
             >
                 <Route index element={<Analytics />} />
+            </Route>
+
+            {/* Share settings page - protected route */}
+            <Route
+                path="/share/settings"
+                element={
+                    <ProtectedRoute>
+                        <Layout />
+                    </ProtectedRoute>
+                }
+            >
+                <Route index element={<ShareSettings />} />
             </Route>
 
             {/* Catch all - redirect to home */}
