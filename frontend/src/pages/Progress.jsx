@@ -115,9 +115,14 @@ function Progress() {
                     <h1 className="page-title">Reading Progress</h1>
                     <p className="page-subtitle">Track your journey through the Quran</p>
                 </div>
-                <Link to="/account" className="btn btn-secondary">
-                    &larr; Back to Account
-                </Link>
+                <div className="page-header-actions">
+                    <Link to="/analytics" className="btn btn-secondary">
+                        📊 Listening Analytics
+                    </Link>
+                    <Link to="/account" className="btn btn-secondary">
+                        &larr; Back to Account
+                    </Link>
+                </div>
             </div>
 
             {/* Overview Stats */}
@@ -226,7 +231,7 @@ function Progress() {
                             {percentage === 100 && (
                                 <div className="surah-progress-badge completed">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                                        <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                                        <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
                                     </svg>
                                     Completed
                                 </div>
@@ -252,7 +257,7 @@ function Progress() {
                                         <span className="bookmark-surah-number">{bookmark.surah_id}</span>
                                         <div className="bookmark-details">
                                             <Link
-                                                to={`/quran/${bookmark.surah_id}`}
+                                                to={`/quran/${bookmark.surah_id}#ayah-${bookmark.ayah_number_in_surah}`}
                                                 className="bookmark-surah"
                                             >
                                                 {bookmark.surah_name}
@@ -263,6 +268,17 @@ function Progress() {
                                             {bookmark.ayah_text && (
                                                 <p className="ayah-text-snippet">
                                                     {bookmark.ayah_text}
+                                                </p>
+                                            )}
+                                            {bookmark.ayah_english && (
+                                                <p className="ayah-english-snippet" style={{
+                                                    fontSize: '0.875rem',
+                                                    color: 'var(--text-secondary)',
+                                                    marginTop: '8px',
+                                                    lineHeight: '1.6',
+                                                    fontStyle: 'italic'
+                                                }}>
+                                                    {bookmark.ayah_english}
                                                 </p>
                                             )}
                                         </div>

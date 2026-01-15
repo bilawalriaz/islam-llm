@@ -2223,6 +2223,7 @@ code {
     .step-item {
         flex-direction: column;
         text-align: center;
+        align-items: center;
     }
 
     .step-number {

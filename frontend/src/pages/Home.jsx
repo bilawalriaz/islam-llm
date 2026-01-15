@@ -150,6 +150,9 @@ function Home() {
                 <Card className="cta-card">
                     <h2>Ready to Start Reading?</h2>
                     <p>Dive into the Quran with a beautiful, distraction-free reading experience.</p>
+                    <p style={{ fontSize: '0.875rem', opacity: 0.85, marginBottom: '24px' }}>
+                        🔒 No tracking. No ads. Ever. Accounts are only used to save your reading progress.
+                    </p>
                     <Link to="/quran" className="btn btn-primary btn-large">
                         Browse Quran
                     </Link>

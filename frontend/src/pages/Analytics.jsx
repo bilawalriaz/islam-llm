@@ -44,7 +44,7 @@ export default function Analytics() {
                         {stats.map((stat, index) => (
                             <Link
                                 key={stat.ayah_id}
-                                to={`/quran/${stat.surah_id}`}
+                                to={`/quran/${stat.surah_id}#ayah-${stat.number_in_surah}`}
                                 className="replay-item"
                                 style={{
                                     display: 'flex',

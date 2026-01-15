@@ -392,6 +392,11 @@ async def get_bookmarks(current_user: dict = Depends(get_current_user)):
         edition_row = cursor.fetchone()
         edition_id = edition_row[0] if edition_row else 1
 
+        # Get English translation edition
+        cursor.execute("SELECT id FROM editions WHERE identifier = ?", ("en.sahih",))
+        en_edition_row = cursor.fetchone()
+        en_edition_id = en_edition_row[0] if en_edition_row else None
+
         enriched_bookmarks = []
         for bm in bookmarks:
             # Get surah info
@@ -402,13 +407,25 @@ async def get_bookmarks(current_user: dict = Depends(get_current_user)):
             """, (bm["surah_id"],))
             surah = cursor.fetchone()
 
-            # Get ayah text
+            # Get ayah text (Arabic)
             cursor.execute("""
                 SELECT text
                 FROM ayahs
                 WHERE id = ?
             """, (bm["ayah_id"],))
             ayah = cursor.fetchone()
+
+            # Get English translation
+            ayah_english = ""
+            if en_edition_id:
+                cursor.execute("""
+                    SELECT text
+                    FROM ayahs
+                    WHERE surah_id = ? AND number_in_surah = ? AND edition_id = ?
+                """, (bm["surah_id"], bm["ayah_number_in_surah"], en_edition_id))
+                en_ayah = cursor.fetchone()
+                if en_ayah:
+                    ayah_english = en_ayah["text"]
 
             enriched_bookmarks.append({
                 "id": bm["id"],
@@ -421,7 +438,8 @@ async def get_bookmarks(current_user: dict = Depends(get_current_user)):
                 "english_name_translation": surah["english_name_translation"] if surah else "",
                 "revelation_type": surah["revelation_type"] if surah else "",
                 "number_of_ayahs": surah["number_of_ayahs"] if surah else 0,
-                "ayah_text": ayah["text"] if ayah else ""
+                "ayah_text": ayah["text"] if ayah else "",
+                "ayah_english": ayah_english
             })
 
         return enriched_bookmarks

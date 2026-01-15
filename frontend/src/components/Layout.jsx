@@ -71,9 +71,6 @@ function Layout() {
                                         <NavLink to="/account" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={closeMobileMenu}>
                                             Progress
                                         </NavLink>
-                                        <NavLink to="/analytics" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={closeMobileMenu}>
-                                            Analytics
-                                        </NavLink>
                                         <div className="nav-continue-journey" onClick={closeMobileMenu}>
                                             <ContinueJourney variant="compact" />
                                         </div>
