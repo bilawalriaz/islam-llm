@@ -817,6 +817,10 @@ a:hover {
     color: var(--accent-hover);
 }
 
+a.btn:hover {
+    color: inherit;
+}
+
 .text-muted {
     color: var(--text-muted);
 }
@@ -1808,7 +1812,91 @@ code {
     font-size: 1.0625rem;
 }
 
-/* Features Grid */
+/* Features Timeline */
+.timeline {
+    position: relative;
+    max-width: 700px;
+    margin: 0 auto;
+    padding-left: 60px;
+}
+
+.timeline-line {
+    position: absolute;
+    left: 24px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, var(--accent-color), var(--accent-hover));
+    border-radius: 1px;
+}
+
+.timeline-item {
+    position: relative;
+    padding-bottom: 40px;
+}
+
+.timeline-item:last-child {
+    padding-bottom: 0;
+}
+
+.timeline-dot {
+    position: absolute;
+    left: -48px;
+    top: 0;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.timeline-icon {
+    width: 48px;
+    height: 48px;
+    background: var(--bg-white);
+    border: 2px solid var(--accent-color);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    box-shadow: var(--shadow-soft);
+    transition: all 0.3s ease;
+}
+
+.timeline-item:hover .timeline-icon {
+    transform: scale(1.1);
+    box-shadow: var(--shadow-glow-accent);
+}
+
+.timeline-content {
+    background: var(--bg-white);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    transition: all 0.3s ease;
+}
+
+.timeline-item:hover .timeline-content {
+    border-color: var(--accent-color);
+    box-shadow: var(--shadow-soft);
+}
+
+.timeline-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+}
+
+.timeline-description {
+    color: var(--text-secondary);
+    line-height: 1.6;
+    font-size: 0.9375rem;
+}
+
+/* Legacy feature styles (keep for backwards compatibility) */
 .features-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -1955,7 +2043,9 @@ code {
 }
 
 .cta-card .btn-primary:hover {
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    border-color: white;
 }
 
 /* =============================================================================
@@ -2214,6 +2304,35 @@ code {
 
     .hero-actions .btn {
         width: 100%;
+        text-align: center;
+        justify-content: center;
+    }
+
+    /* Timeline mobile styles */
+    .timeline {
+        padding-left: 50px;
+    }
+
+    .timeline-line {
+        left: 18px;
+    }
+
+    .timeline-dot {
+        left: -42px;
+    }
+
+    .timeline-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 1.25rem;
+    }
+
+    .timeline-content {
+        padding: 16px;
+    }
+
+    .timeline-title {
+        font-size: 1.125rem;
     }
 
     .features-grid {

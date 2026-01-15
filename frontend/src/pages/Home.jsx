@@ -77,19 +77,20 @@ function Home() {
                 </div>
             </section>
 
-            {/* Features Section */}
+            {/* Features Timeline */}
             <section className="features-section">
-                <div className="section-header">
-                    <h2 className="section-title">Features</h2>
-                    <p className="section-subtitle">Everything you need for a meaningful reading experience</p>
-                </div>
-                <div className="features-grid">
+                <div className="timeline">
+                    <div className="timeline-line" />
                     {features.map((feature, index) => (
-                        <Card key={index} className="feature-card">
-                            <div className="feature-icon">{feature.icon}</div>
-                            <h3 className="feature-title">{feature.title}</h3>
-                            <p className="feature-description">{feature.description}</p>
-                        </Card>
+                        <div key={index} className="timeline-item">
+                            <div className="timeline-dot">
+                                <div className="timeline-icon">{feature.icon}</div>
+                            </div>
+                            <div className="timeline-content">
+                                <h3 className="timeline-title">{feature.title}</h3>
+                                <p className="timeline-description">{feature.description}</p>
+                            </div>
+                        </div>
                     ))}
                 </div>
             </section>
