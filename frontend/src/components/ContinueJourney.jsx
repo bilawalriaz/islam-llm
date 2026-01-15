@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getSequentialProgress } from '../api/client';
 
 /**
@@ -12,21 +12,37 @@ import { getSequentialProgress } from '../api/client';
 export function ContinueJourney({ variant = 'card' }) {
     const [progress, setProgress] = useState(null);
     const [loading, setLoading] = useState(true);
+    const requestInFlight = useRef(false);
 
     useEffect(() => {
-        loadProgress();
-    }, []);
+        // Prevent duplicate requests (React StrictMode runs effects twice)
+        if (requestInFlight.current) return;
 
-    const loadProgress = async () => {
-        try {
-            const data = await getSequentialProgress();
-            setProgress(data);
-        } catch (err) {
-            console.error('Failed to load progress:', err);
-        } finally {
-            setLoading(false);
-        }
-    };
+        let cancelled = false;
+        requestInFlight.current = true;
+
+        const loadProgress = async () => {
+            try {
+                const data = await getSequentialProgress();
+                if (!cancelled) {
+                    setProgress(data);
+                }
+            } catch (err) {
+                console.error('Failed to load progress:', err);
+            } finally {
+                if (!cancelled) {
+                    setLoading(false);
+                    requestInFlight.current = false;
+                }
+            }
+        };
+
+        loadProgress();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     if (loading || !progress) {
         return null;

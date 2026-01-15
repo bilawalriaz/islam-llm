@@ -29,12 +29,26 @@ function Layout() {
         setMobileMenuOpen(false);
     };
 
-    // Show loading state
+    // Show skeleton shell while loading
     if (loading) {
         return (
-            <div className="container">
-                <div className="loading-state">Loading...</div>
-            </div>
+            <>
+                <div className="container">
+                    <header className="header">
+                        <div className="logo">
+                            <div className="logo-mark">Q</div>
+                            <span className="logo-text">Quran Reader</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <div className="skeleton" style={{ width: '80px', height: '36px', borderRadius: 'var(--radius-md)' }} />
+                            <div className="skeleton" style={{ width: '80px', height: '36px', borderRadius: 'var(--radius-md)' }} />
+                        </div>
+                    </header>
+                    <main>
+                        <div className="skeleton" style={{ width: '100%', height: '300px', borderRadius: 'var(--radius-lg)', marginTop: '40px' }} />
+                    </main>
+                </div>
+            </>
         );
     }
 
