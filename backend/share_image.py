@@ -9,6 +9,8 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from io import BytesIO
 import math
 import os
+import requests
+import random
 from pathlib import Path
 
 # Colors based on the app's design system - modern premium look
@@ -26,7 +28,14 @@ COLORS = {
     'white': '#ffffff',
     'gold': '#c2410c',             # Deep warm orange for divider
     'gold_light': '#fdba74',
+    'glass_bg': 'rgba(255, 255, 255, 0.15)',
+    'glass_border': 'rgba(255, 255, 255, 0.3)',
 }
+
+# Nature background options (Unsplash category/query)
+NATURE_QUERIES = [
+    'nature', 'mountain', 'stars', 'galaxy', 'ocean', 'forest', 'desert', 'night'
+]
 
 # Card dimensions (content area) - HIGH RES
 CARD_WIDTH = 1600
@@ -136,6 +145,39 @@ def create_shadow(width, height, radius=20, blur=30, opacity=100, offset_x=0, of
     return shadow
 
 
+def get_unsplash_image(width, height, query="nature"):
+    """Fetch a random image from Unsplash."""
+    try:
+        url = f"https://source.unsplash.com/featured/{width}x{height}/?{query}"
+        # source.unsplash.com is being deprecated, using images.unsplash.com with random query
+        # Actually, let's use a curated list of high-quality nature images for stability
+        nature_images = [
+            "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1600&q=80", # mountains
+            "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=1600&q=80", # forest
+            "https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&w=1600&q=80", # hills
+            "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1600&q=80", # forest sun
+            "https://images.unsplash.com/photo-1506744038d36-0831d10ca9ce?auto=format&fit=crop&w=1600&q=80", # yosemite
+            "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=1600&q=80", # landscape
+            "https://images.unsplash.com/photo-1434725039720-abb26e22ebe8?auto=format&fit=crop&w=1600&q=80", # field
+            "https://images.unsplash.com/photo-1532274402911-5a33904d2824?auto=format&fit=crop&w=1600&q=80", # sunset
+        ]
+        img_url = random.choice(nature_images)
+        response = requests.get(img_url, timeout=10)
+        if response.status_code == 200:
+            return Image.open(BytesIO(response.content)).convert('RGBA').resize((width, height), Image.LANCZOS)
+    except Exception as e:
+        print(f"Error fetching Unsplash image: {e}")
+    
+    # Fallback: Create a nice dark gradient
+    fallback = Image.new('RGBA', (width, height), (15, 23, 42, 255)) # Dark slate
+    draw = ImageDraw.Draw(fallback)
+    for y in range(height):
+        r, g, b = 15, 23, 42
+        alpha = int(255 * (1 - y/height * 0.5))
+        draw.line([(0, y), (width, y)], fill=(r, g, b, alpha))
+    return fallback
+
+
 def wrap_arabic_text(text, font, max_width, draw):
     """Wrap Arabic text to fit within a maximum width."""
     lines = []
@@ -191,14 +233,18 @@ def generate_ayah_image(
     surah_number,
     ayah_number,
     surah_english_name="",
+    surah_translation="",
+    total_ayahs=0,
     edition_name="",
     square=False,
-    portrait=False
+    portrait=False,
+    style="classic"
 ):
-    """Generate a beautiful image for sharing an ayah with orange gradient background.
+    """Generate a beautiful image for sharing an ayah.
     
     Args:
         portrait: If True, generate 9:16 portrait image for mobile stories
+        style: 'classic' (orange gradient) or 'nature' (unsplash background)
     """
     
     # Set card dimensions based on format
@@ -239,22 +285,70 @@ def generate_ayah_image(
     shadow_y = SHADOW_EXPAND - SHADOW_BLUR * 2
     img.paste(shadow, (shadow_x, shadow_y), shadow)
 
-    # Create card layer with gradient background
+    # Create card layer
     card = Image.new('RGBA', (card_width, card_height), (0, 0, 0, 0))
     card_draw = ImageDraw.Draw(card)
 
-    # Draw gradient background (warm orange gradient from top to bottom)
-    for y in range(card_height):
-        ratio = y / card_height
-        r = int(gradient_start_rgb[0] + (gradient_end_rgb[0] - gradient_start_rgb[0]) * ratio)
-        g = int(gradient_start_rgb[1] + (gradient_end_rgb[1] - gradient_start_rgb[1]) * ratio)
-        b = int(gradient_start_rgb[2] + (gradient_end_rgb[2] - gradient_start_rgb[2]) * ratio)
-        card_draw.line([(0, y), (card_width, y)], fill=(r, g, b, 255))
+    if style == "nature":
+        # Load nature background
+        bg = get_unsplash_image(card_width, card_height)
+        card.paste(bg, (0, 0))
+        
+        # Darkening overlay
+        overlay = Image.new('RGBA', (card_width, card_height), (0, 0, 0, 100))
+        card.alpha_composite(overlay)
+        
+        text_color = (255, 255, 255)
+        secondary_text_color = (220, 220, 220)
+        divider_color = (255, 255, 255, 120)  # Slightly more visible
+    else:
+        # Draw gradient background (warm orange gradient from top to bottom)
+        for y in range(card_height):
+            ratio = y / card_height
+            r = int(gradient_start_rgb[0] + (gradient_end_rgb[0] - gradient_start_rgb[0]) * ratio)
+            g = int(gradient_start_rgb[1] + (gradient_end_rgb[1] - gradient_start_rgb[1]) * ratio)
+            b = int(gradient_start_rgb[2] + (gradient_end_rgb[2] - gradient_start_rgb[2]) * ratio)
+            card_draw.line([(0, y), (card_width, y)], fill=(r, g, b, 255))
+        
+        text_color = text_primary_rgb
+        secondary_text_color = text_secondary_rgb
+        divider_color = (*gold_rgb, 180)
 
     # Apply rounded corner mask
     mask = create_rounded_rectangle_mask((card_width, card_height), CORNER_RADIUS)
     card.putalpha(mask)
     card_draw = ImageDraw.Draw(card)
+
+    if style == "nature":
+        # Draw a glassy panel in the middle for the text content
+        # We'll calculate the panel size based on content later, but for now a fixed-ish one
+        panel_margin = 60
+        panel_rect = [panel_margin, 180, card_width - panel_margin, card_height - 120]
+        
+        # Draw glassy background (blurred background + semi-transparent white)
+        panel_mask = Image.new('L', (card_width, card_height), 0)
+        panel_draw = ImageDraw.Draw(panel_mask)
+        panel_draw.rounded_rectangle(panel_rect, radius=32, fill=255)
+        
+        # Crop background area behind panel from the original background image
+        panel_crop = bg.crop((panel_rect[0], panel_rect[1], panel_rect[2], panel_rect[3]))
+        # Apply Gaussian blur
+        panel_blur = panel_crop.filter(ImageFilter.GaussianBlur(radius=30))
+        
+        # Create a local mask for the cropped area (rounded corners)
+        local_mask = Image.new('L', (panel_rect[2] - panel_rect[0], panel_rect[3] - panel_rect[1]), 0)
+        local_draw = ImageDraw.Draw(local_mask)
+        local_draw.rounded_rectangle([0, 0, panel_rect[2] - panel_rect[0], panel_rect[3] - panel_rect[1]], radius=32, fill=255)
+        
+        # Paste blurred background back onto card
+        card.paste(panel_blur, (panel_rect[0], panel_rect[1]), local_mask)
+        
+        # Add frosted glass effect (semi-transparent white) - Increased opacity for better contrast
+        glass_overlay = Image.new('RGBA', (card_width, card_height), (230, 230, 230, 220))
+        card.paste(glass_overlay, (0, 0), panel_mask)
+        
+        # Glassy border
+        card_draw.rounded_rectangle(panel_rect, radius=32, outline=(255, 255, 255, 180), width=2)
 
     # Content margins
     margin_x = 80
@@ -284,11 +378,18 @@ def generate_ayah_image(
 
     # Draw badge with surah name
     badge_font = get_font(int(28 * scale))
-    # Include English name if available
-    if surah_english_name:
-        badge_text = f"{surah_english_name}  •  Ayah {ayah_number}"
-    else:
-        badge_text = f"Surah {surah_number}  •  Ayah {ayah_number}"
+    
+    # Construct refined badge text
+    name_part = surah_english_name or (f"Surah {surah_number}")
+    if surah_english_name and surah_translation:
+        name_part = f"{surah_english_name} ({surah_translation})"
+    
+    ayah_part = f"Ayah {ayah_number}"
+    if total_ayahs > 0:
+        ayah_part = f"Ayah {ayah_number}/{total_ayahs}"
+        
+    badge_text = f"{name_part}  •  {ayah_part}"
+    
     badge_bbox = card_draw.textbbox((0, 0), badge_text, font=badge_font)
     badge_width = badge_bbox[2] - badge_bbox[0]
     badge_height = badge_bbox[3] - badge_bbox[1]
@@ -345,7 +446,7 @@ def generate_ayah_image(
         card_draw.text(
             (line_x, current_y), 
             line, 
-            fill=text_primary_rgb, 
+            fill=text_color, 
             font=arabic_font
         )
         current_y += arabic_line_height
@@ -360,7 +461,7 @@ def generate_ayah_image(
     card_draw.line(
         [(margin_x + separator_padding, current_y), 
          (card_width - margin_x - separator_padding, current_y)], 
-        fill=(*gold_rgb, 180), 
+        fill=divider_color, 
         width=separator_thickness
     )
     
@@ -369,12 +470,12 @@ def generate_ayah_image(
     card_draw.ellipse(
         [(margin_x + separator_padding - dot_size, current_y - dot_size),
          (margin_x + separator_padding + dot_size, current_y + dot_size)],
-        fill=(*gold_rgb, 180)
+        fill=divider_color
     )
     card_draw.ellipse(
         [(card_width - margin_x - separator_padding - dot_size, current_y - dot_size),
          (card_width - margin_x - separator_padding + dot_size, current_y + dot_size)],
-        fill=(*gold_rgb, 180)
+        fill=divider_color
     )
     
     current_y += int(60 * scale)  # Space after divider
@@ -389,7 +490,7 @@ def generate_ayah_image(
             card_draw.text(
                 (line_x, current_y), 
                 line, 
-                fill=text_secondary_rgb, 
+                fill=secondary_text_color, 
                 font=translation_font
             )
             current_y += translation_line_height
@@ -406,7 +507,7 @@ def generate_ayah_image(
     card_draw.text(
         (footer_x, footer_y), 
         footer_text, 
-        fill=(*text_secondary_rgb, 150), 
+        fill=(*hex_to_rgb("#ffffff"), 150) if style == "nature" else (*text_secondary_rgb, 150), 
         font=footer_font
     )
 
@@ -425,15 +526,19 @@ def generate_ayah_image_bytes(
     surah_number,
     ayah_number,
     surah_english_name="",
+    surah_translation="",
+    total_ayahs=0,
     edition_name="",
     square=False,
     portrait=False,
+    style="classic",
     format="png"
 ):
     """Generate the image and return it as bytes.
     
     Args:
         portrait: If True, generate 9:16 portrait for mobile stories (WhatsApp, Snapchat, etc.)
+        style: 'classic' or 'nature'
     """
     img = generate_ayah_image(
         arabic_text,
@@ -442,9 +547,12 @@ def generate_ayah_image_bytes(
         surah_number,
         ayah_number,
         surah_english_name=surah_english_name,
+        surah_translation=surah_translation,
+        total_ayahs=total_ayahs,
         edition_name=edition_name,
         square=square,
-        portrait=portrait
+        portrait=portrait,
+        style=style
     )
     
     buffer = BytesIO()

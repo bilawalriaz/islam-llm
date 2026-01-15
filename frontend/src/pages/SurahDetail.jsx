@@ -179,17 +179,16 @@ function SurahDetail() {
         }
     }, [volume]);
 
-    // Smooth scroll to playing ayah with a slight delay for buttery feel
+    // Smooth scroll to playing ayah immediately for zero-latency feel
     useEffect(() => {
         if (playingAyah !== null && ayahRefs.current[playingAyah]) {
-            // Use a small delay to allow the card animation to start
-            const timeoutId = setTimeout(() => {
-                ayahRefs.current[playingAyah].scrollIntoView({
+            // Use requestAnimationFrame to ensure we scroll in the correct frame cycle
+            requestAnimationFrame(() => {
+                ayahRefs.current[playingAyah]?.scrollIntoView({
                     behavior: 'smooth',
                     block: 'center',
                 });
-            }, 100);
-            return () => clearTimeout(timeoutId);
+            });
         }
     }, [playingAyah]);
 
@@ -412,7 +411,10 @@ function SurahDetail() {
                     lastPlayingAyahRef.current = index;
                     setPlayingAyah(index);
                     // Preload next 2 ayahs after starting playback
-                    preloadNextAyahs(index, audioEdition);
+                    // Defer preloading to avoid jank during transition (500ms delay)
+                    setTimeout(() => {
+                        preloadNextAyahs(index, audioEdition);
+                    }, 500);
                 })
                 .catch(err => console.error('Playback failed:', err));
         }
@@ -813,6 +815,9 @@ function SurahDetail() {
                                             surahId={parseInt(id)}
                                             ayahNumber={ayah.number_in_surah}
                                             surahName={surah.name}
+                                            surahEnglishName={surah.english_name}
+                                            surahTranslation={surah.english_name_translation}
+                                            totalAyahs={surah.number_of_ayahs}
                                             translation={selectedTranslation}
                                         />
                                         {/* Play/Pause Button */}

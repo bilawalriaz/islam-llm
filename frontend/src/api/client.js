@@ -381,11 +381,12 @@ export async function getBookmarksForSurah(surahId) {
  * @param {string} format - Image format (png or jpeg)
  * @returns {string} The URL for the share image
  */
-export function getAyahShareImageUrl(surahId, ayahNumber, translation = 'en.sahih', square = false, portrait = false, format = 'png') {
+export function getAyahShareImageUrl(surahId, ayahNumber, translation = 'en.sahih', square = false, portrait = false, style = 'classic', format = 'png') {
     const params = new URLSearchParams({
         translation,
         square: square.toString(),
         portrait: portrait.toString(),
+        style,
         format,
     });
     return `/api/share/ayah/${surahId}/${ayahNumber}?${params.toString()}`;
@@ -399,10 +400,11 @@ export function getAyahShareImageUrl(surahId, ayahNumber, translation = 'en.sahi
  * @param {string} format - Image format (png or jpeg)
  * @returns {string} The URL for the share image
  */
-export function getAyahShareImageUrlById(ayahId, translation = 'en.sahih', square = false, format = 'png') {
+export function getAyahShareImageUrlById(ayahId, translation = 'en.sahih', square = false, style = 'classic', format = 'png') {
     const params = new URLSearchParams({
         translation,
         square: square.toString(),
+        style,
         format,
     });
     return `/api/share/ayah/by-id/${ayahId}?${params.toString()}`;

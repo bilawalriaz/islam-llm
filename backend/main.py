@@ -888,6 +888,7 @@ def get_ayah_share_image(
     translation: str = Query("en.sahih", description="Translation edition"),
     square: bool = Query(False, description="Generate square image for Instagram"),
     portrait: bool = Query(False, description="Generate 9:16 portrait for mobile stories"),
+    style: str = Query("classic", description="Image style (classic or nature)"),
     format: str = Query("png", description="Image format (png or jpeg)")
 ):
     """
@@ -956,9 +957,12 @@ def get_ayah_share_image(
             surah_number=surah_id,
             ayah_number=ayah_number,
             surah_english_name=surah["english_name"],
+            surah_translation=surah["english_name_translation"],
+            total_ayahs=surah["number_of_ayahs"],
             edition_name=edition,
             square=square,
             portrait=portrait,
+            style=style,
             format=image_format
         )
 
@@ -984,6 +988,7 @@ def get_ayah_share_image_by_id(
     ayah_id: int,
     translation: str = Query("en.sahih", description="Translation edition"),
     square: bool = Query(False, description="Generate square image for Instagram"),
+    style: str = Query("classic", description="Image style (classic or nature)"),
     format: str = Query("png", description="Image format (png or jpeg)")
 ):
     """
@@ -998,7 +1003,7 @@ def get_ayah_share_image_by_id(
         # Get ayah with surah info
         cursor.execute("""
             SELECT a.text, a.number_in_surah, a.surah_id,
-                   s.name, s.english_name
+                   s.name, s.english_name, s.english_name_translation, s.number_of_ayahs
             FROM ayahs a
             JOIN surahs s ON s.id = a.surah_id
             WHERE a.id = ?
@@ -1032,8 +1037,12 @@ def get_ayah_share_image_by_id(
             surah_name=result["name"],
             surah_number=result["surah_id"],
             ayah_number=result["number_in_surah"],
+            surah_english_name=result["english_name"],
+            surah_translation=result["english_name_translation"],
+            total_ayahs=result["number_of_ayahs"],
             edition_name="",
             square=square,
+            style=style,
             format=image_format
         )
 
