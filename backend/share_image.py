@@ -2,44 +2,46 @@
 Ayah Share Image Generator
 
 Creates beautiful, artistic shareable images for Quran ayahs.
-Features rounded card design with macOS-style blurred shadow and elegant typography.
+Features rounded card design with warm orange gradient and elegant typography.
 """
 
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from io import BytesIO
-import arabic_reshaper
-from bidi.algorithm import get_display
 import math
 import os
 from pathlib import Path
 
-# Colors based on the app's design system
+# Colors based on the app's design system - modern premium look
 COLORS = {
-    # Primary colors
+    # Primary colors - warm orange gradient
     'accent': '#f97316',           # Orange
     'accent_dark': '#ea580c',      # Darker orange
     'accent_light': '#fed7aa',     # Light orange
-    'bg_cream': '#fafaf9',         # Light cream
+    'gradient_start': '#fff7ed',   # Very light orange/cream
+    'gradient_end': '#ffedd5',     # Light peachy orange
     'bg_dark': '#0f172a',          # Dark slate
-    'text_primary': '#0f172a',     # Dark slate
-    'text_secondary': '#475569',   # Medium slate
+    'text_primary': '#1c1917',     # Warm dark
+    'text_secondary': '#44403c',   # Warm gray
+    'text_muted': '#78716c',       # Lighter warm gray
     'white': '#ffffff',
-    'gold': '#d4af37',
-    'gold_light': '#f4e4bc',
+    'gold': '#c2410c',             # Deep warm orange for divider
+    'gold_light': '#fdba74',
 }
 
-# Card dimensions (content area)
-CARD_WIDTH = 1200
-CARD_HEIGHT = 630  # 16:9 aspect ratio
-SQUARE_CARD_SIZE = 1080  # For Instagram
+# Card dimensions (content area) - HIGH RES
+CARD_WIDTH = 1600
+CARD_HEIGHT = 900
+SQUARE_CARD_SIZE = 1440
+PORTRAIT_WIDTH = 1080  # 9:16 for mobile stories
+PORTRAIT_HEIGHT = 1920
 
 # Shadow and padding settings
-SHADOW_EXPAND = 80  # Extra pixels around card for shadow
-SHADOW_BLUR = 40
-SHADOW_OPACITY = 100  # 0-255
-SHADOW_OFFSET_Y = 15
+SHADOW_EXPAND = 100
+SHADOW_BLUR = 50
+SHADOW_OPACITY = 60
+SHADOW_OFFSET_Y = 20
 SHADOW_OFFSET_X = 0
-CORNER_RADIUS = 32
+CORNER_RADIUS = 48
 
 
 def hex_to_rgb(hex_color):
@@ -49,19 +51,15 @@ def hex_to_rgb(hex_color):
 
 
 def get_font(size, bold=False):
-    """
-    Get a font for rendering text.
-    Uses InstrumentSerif as primary, Inter as fallback.
-    """
+    """Get a font for rendering text."""
     font_options = [
-        'InstrumentSerif-Regular.ttf',      # Primary choice - elegant serif
-        'Inter-VariableFont_opsz,wght.ttf', # Fallback - clean sans-serif
+        'InstrumentSerif-Regular.ttf',
+        'Inter-VariableFont_opsz,wght.ttf',
         'Arial.ttf',
         'Helvetica.ttf',
         'DejaVuSans.ttf',
     ]
 
-    # Try to load font from the backend directory first
     backend_dir = Path(__file__).parent
     for font_name in font_options:
         font_path = backend_dir / 'fonts' / font_name
@@ -71,22 +69,20 @@ def get_font(size, bold=False):
             except:
                 pass
 
-    # Fall back to system fonts
     for font_name in font_options:
         try:
             return ImageFont.truetype(font_name, size)
         except:
             continue
 
-    # Ultimate fallback
     return ImageFont.load_default()
 
 
 def get_arabic_font(size):
-    """Get a font specifically for Arabic text. Uses AmiriQuran as primary."""
+    """Get a font specifically for Arabic text."""
     font_options = [
-        'AmiriQuran-Regular.ttf',               # Primary - optimized for Quran
-        'PlaypenSansArabic-VariableFont_wght.ttf',  # Alternative - modern style
+        'AmiriQuran-Regular.ttf',
+        'PlaypenSansArabic-VariableFont_wght.ttf',
         'NotoNaskhArabic-Regular.ttf',
         'ScheherazadeNew-Regular.ttf',
         'Traditional Arabic.ttf',
@@ -98,10 +94,8 @@ def get_arabic_font(size):
         font_path = backend_dir / 'fonts' / font_name
         if font_path.exists():
             try:
-                font = ImageFont.truetype(str(font_path), size)
-                return font
-            except Exception as e:
-                print(f"Failed to load {font_path}: {e}")
+                return ImageFont.truetype(str(font_path), size)
+            except:
                 pass
 
     for font_name in font_options:
@@ -114,29 +108,22 @@ def get_arabic_font(size):
 
 
 def create_rounded_rectangle_mask(size, radius):
-    """Create a mask for a rounded rectangle."""
-    width, height = size
-    mask = Image.new('L', (width, height), 0)
+    """Create a mask for rounded rectangles."""
+    mask = Image.new('L', size, 0)
     draw = ImageDraw.Draw(mask)
-    draw.rounded_rectangle([(0, 0), (width - 1, height - 1)], radius=radius, fill=255)
+    draw.rounded_rectangle([(0, 0), (size[0]-1, size[1]-1)], radius=radius, fill=255)
     return mask
 
 
-def create_shadow(width, height, radius, blur, opacity, offset_x=0, offset_y=0):
-    """
-    Create a macOS-style blurred shadow for a rounded rectangle.
-    Returns an RGBA image with the shadow.
-    """
-    # Create a larger canvas for the shadow blur
+def create_shadow(width, height, radius=20, blur=30, opacity=100, offset_x=0, offset_y=10):
+    """Create a blurred shadow for the card."""
     expand = blur * 2
     shadow_width = width + expand * 2
     shadow_height = height + expand * 2
     
-    # Create shadow shape
     shadow = Image.new('RGBA', (shadow_width, shadow_height), (0, 0, 0, 0))
     shadow_draw = ImageDraw.Draw(shadow)
     
-    # Draw the rounded rectangle shape for shadow
     shadow_draw.rounded_rectangle(
         [(expand + offset_x, expand + offset_y), 
          (expand + width - 1 + offset_x, expand + height - 1 + offset_y)],
@@ -144,23 +131,16 @@ def create_shadow(width, height, radius, blur, opacity, offset_x=0, offset_y=0):
         fill=(0, 0, 0, opacity)
     )
     
-    # Apply gaussian blur for soft shadow effect
     shadow = shadow.filter(ImageFilter.GaussianBlur(radius=blur))
     
     return shadow
 
 
 def wrap_arabic_text(text, font, max_width, draw):
-    """
-    Wrap Arabic text to fit within a maximum width.
-    Returns a list of text lines.
-    """
-    # Reshape Arabic text for proper rendering
-    reshaped_text = arabic_reshaper.reshape(text)
-    
+    """Wrap Arabic text to fit within a maximum width."""
     lines = []
     current_line = ""
-    words = reshaped_text.split(' ')
+    words = text.split(' ')
 
     for word in words:
         test_line = current_line + (' ' if current_line else '') + word
@@ -177,17 +157,14 @@ def wrap_arabic_text(text, font, max_width, draw):
     if current_line:
         lines.append(current_line)
 
-    # Apply bidi algorithm for proper RTL display
-    return [get_display(line) for line in lines]
+    return lines
 
 
 def wrap_english_text(text, font, max_width, draw):
-    """
-    Wrap English text to fit within a maximum width.
-    """
-    words = text.split()
+    """Wrap English text to fit within a maximum width."""
     lines = []
     current_line = ""
+    words = text.split(' ')
 
     for word in words:
         test_line = current_line + (' ' if current_line else '') + word
@@ -213,42 +190,36 @@ def generate_ayah_image(
     surah_name,
     surah_number,
     ayah_number,
+    surah_english_name="",
     edition_name="",
-    square=False
+    square=False,
+    portrait=False
 ):
-    """
-    Generate a beautiful, artistic image for sharing an ayah.
-    Creates a rounded card with macOS-style shadow on transparent background.
-
+    """Generate a beautiful image for sharing an ayah with orange gradient background.
+    
     Args:
-        arabic_text: The Arabic text of the ayah
-        translation_text: The translation text
-        surah_name: Name of the surah (Arabic)
-        surah_number: Surah number
-        ayah_number: Ayah number within the surah
-        edition_name: Name of the translation edition
-        square: If True, generate a square image (for Instagram)
-
-    Returns:
-        PIL Image object (RGBA with transparency)
+        portrait: If True, generate 9:16 portrait image for mobile stories
     """
-    # Set card dimensions
-    if square:
+    
+    # Set card dimensions based on format
+    if portrait:
+        card_width, card_height = PORTRAIT_WIDTH, PORTRAIT_HEIGHT
+    elif square:
         card_width, card_height = SQUARE_CARD_SIZE, SQUARE_CARD_SIZE
     else:
         card_width, card_height = CARD_WIDTH, CARD_HEIGHT
 
-    # Calculate total canvas size (card + shadow space)
+    # Calculate total canvas size
     canvas_width = card_width + SHADOW_EXPAND * 2
     canvas_height = card_height + SHADOW_EXPAND * 2
 
     # Color RGB values
-    bg_rgb = hex_to_rgb(COLORS['bg_cream'])
+    gradient_start_rgb = hex_to_rgb(COLORS['gradient_start'])
+    gradient_end_rgb = hex_to_rgb(COLORS['gradient_end'])
     accent_rgb = hex_to_rgb(COLORS['accent'])
     text_primary_rgb = hex_to_rgb(COLORS['text_primary'])
     text_secondary_rgb = hex_to_rgb(COLORS['text_secondary'])
     gold_rgb = hex_to_rgb(COLORS['gold'])
-    white_rgb = hex_to_rgb(COLORS['white'])
 
     # Create shadow
     shadow = create_shadow(
@@ -263,139 +234,153 @@ def generate_ayah_image(
     # Create main canvas (transparent)
     img = Image.new('RGBA', (canvas_width, canvas_height), (0, 0, 0, 0))
 
-    # Calculate shadow position to center the card
+    # Paste shadow
     shadow_x = SHADOW_EXPAND - SHADOW_BLUR * 2
     shadow_y = SHADOW_EXPAND - SHADOW_BLUR * 2
-
-    # Paste shadow onto canvas
     img.paste(shadow, (shadow_x, shadow_y), shadow)
 
-    # Create card layer
+    # Create card layer with gradient background
     card = Image.new('RGBA', (card_width, card_height), (0, 0, 0, 0))
     card_draw = ImageDraw.Draw(card)
 
-    # Draw rounded rectangle background with gradient effect
-    # First, create a solid background
-    card_draw.rounded_rectangle(
-        [(0, 0), (card_width - 1, card_height - 1)],
-        radius=CORNER_RADIUS,
-        fill=(*bg_rgb, 255)
-    )
-
-    # Add subtle gradient overlay inside the card
-    gradient = Image.new('RGBA', (card_width, card_height), (0, 0, 0, 0))
-    gradient_draw = ImageDraw.Draw(gradient)
+    # Draw gradient background (warm orange gradient from top to bottom)
     for y in range(card_height):
-        # Very subtle gradient from top to bottom
-        factor = y / card_height
-        alpha = int(10 * factor)  # Very subtle
-        gradient_draw.line([(0, y), (card_width, y)], fill=(0, 0, 0, alpha))
-    
-    # Apply gradient with rounded mask
+        ratio = y / card_height
+        r = int(gradient_start_rgb[0] + (gradient_end_rgb[0] - gradient_start_rgb[0]) * ratio)
+        g = int(gradient_start_rgb[1] + (gradient_end_rgb[1] - gradient_start_rgb[1]) * ratio)
+        b = int(gradient_start_rgb[2] + (gradient_end_rgb[2] - gradient_start_rgb[2]) * ratio)
+        card_draw.line([(0, y), (card_width, y)], fill=(r, g, b, 255))
+
+    # Apply rounded corner mask
     mask = create_rounded_rectangle_mask((card_width, card_height), CORNER_RADIUS)
-    card = Image.composite(Image.alpha_composite(card, gradient), card, mask)
+    card.putalpha(mask)
     card_draw = ImageDraw.Draw(card)
 
     # Content margins
-    margin_x = 60
-    margin_top = 50
+    margin_x = 80
+    margin_top = 60
     margin_bottom = 80
 
-    # Content area
     content_width = card_width - 2 * margin_x
     current_y = margin_top
 
-    # Draw surah and ayah info badge
-    info_font = get_font(24, bold=True)
-    surah_info = f"Surah {surah_number}: {surah_name}  •  Ayah {ayah_number}"
-    info_bbox = card_draw.textbbox((0, 0), surah_info, font=info_font)
-    info_width = info_bbox[2] - info_bbox[0]
-    info_height = info_bbox[3] - info_bbox[1]
-    info_x = (card_width - info_width) // 2
+    # Estimate content to determine if we need smaller fonts
+    arabic_word_count = len(arabic_text.split())
+    translation_word_count = len(translation_text.split()) if translation_text else 0
+    
+    # Responsive font sizing
+    if arabic_word_count > 30 or translation_word_count > 60:
+        arabic_font_size = 56
+        translation_font_size = 32
+        scale = 0.8
+    elif arabic_word_count > 20 or translation_word_count > 40:
+        arabic_font_size = 64
+        translation_font_size = 38
+        scale = 0.9
+    else:
+        arabic_font_size = 72
+        translation_font_size = 44
+        scale = 1.0
 
-    # Info badge background
-    badge_padding_x = 24
+    # Draw badge with surah name
+    badge_font = get_font(int(28 * scale))
+    # Include English name if available
+    if surah_english_name:
+        badge_text = f"{surah_english_name}  •  Ayah {ayah_number}"
+    else:
+        badge_text = f"Surah {surah_number}  •  Ayah {ayah_number}"
+    badge_bbox = card_draw.textbbox((0, 0), badge_text, font=badge_font)
+    badge_width = badge_bbox[2] - badge_bbox[0]
+    badge_height = badge_bbox[3] - badge_bbox[1]
+    badge_x = (card_width - badge_width) // 2
+
+    badge_padding_x = 28
     badge_padding_y = 12
-    badge_height = info_height + badge_padding_y * 2
+    pill_height = badge_height + badge_padding_y * 2
     
     card_draw.rounded_rectangle(
-        [(info_x - badge_padding_x, current_y), 
-         (info_x + info_width + badge_padding_x, current_y + badge_height)],
-        radius=badge_height // 2,
+        [(badge_x - badge_padding_x, current_y), 
+         (badge_x + badge_width + badge_padding_x, current_y + pill_height)],
+        radius=pill_height // 2,
         fill=(*accent_rgb, 255)
     )
 
     card_draw.text(
-        (info_x, current_y + badge_padding_y - 2), 
-        surah_info, 
+        (badge_x, current_y + badge_padding_y - 2), 
+        badge_text, 
         fill=(255, 255, 255), 
-        font=info_font
+        font=badge_font
     )
-    current_y += badge_height + 40
+    current_y += pill_height + int(40 * scale)
 
     # Draw Arabic text
-    arabic_font_size = 44 if square else 48
     arabic_font = get_arabic_font(arabic_font_size)
     arabic_lines = wrap_arabic_text(arabic_text, arabic_font, content_width, card_draw)
+    arabic_line_height = int(arabic_font_size * 1.8)
 
-    # Calculate arabic text block height
-    arabic_line_height = int(arabic_font_size * 1.6)
-    arabic_block_height = len(arabic_lines) * arabic_line_height
-
-    # Calculate translation height
-    translation_height = 0
+    # Calculate translation
+    translation_font = get_font(translation_font_size)
     trans_lines = []
     if translation_text:
-        translation_font = get_font(22)
         trans_lines = wrap_english_text(translation_text, translation_font, content_width, card_draw)
-        translation_height = len(trans_lines) * 32 + 30
 
-    total_content_height = arabic_block_height + 30 + translation_height
+    # Calculate total content height for vertical centering
+    arabic_block_height = len(arabic_lines) * arabic_line_height
+    translation_line_height = int(translation_font_size * 1.5)
+    translation_block_height = len(trans_lines) * translation_line_height if trans_lines else 0
+    divider_spacing = int(80 * scale)  # More spacing for divider
+    
+    total_content = arabic_block_height + divider_spacing + translation_block_height
+    available_height = card_height - current_y - margin_bottom - 50
+    
+    if total_content < available_height:
+        current_y += (available_height - total_content) // 3
 
-    # Calculate available space and center content vertically
-    available_height = card_height - current_y - margin_bottom - 50  # 50 for footer
-    if total_content_height < available_height:
-        current_y += (available_height - total_content_height) // 2
-
-    # Draw Arabic text with nice spacing
+    # Draw Arabic text
     for line in arabic_lines:
         bbox = card_draw.textbbox((0, 0), line, font=arabic_font)
         line_width = bbox[2] - bbox[0]
         line_x = (card_width - line_width) // 2
 
-        # Draw text with subtle shadow
-        card_draw.text(
-            (line_x + 1, current_y + 1), 
-            line, 
-            fill=(*text_primary_rgb, 40), 
-            font=arabic_font
-        )
         card_draw.text(
             (line_x, current_y), 
             line, 
             fill=text_primary_rgb, 
             font=arabic_font
         )
-
         current_y += arabic_line_height
 
-    current_y += 25
+    # Draw separator with generous spacing
+    current_y += int(60 * scale)  # Space before divider
 
-    # Draw separator line
-    separator_padding = 100
+    separator_padding = int(120 * scale)
+    separator_thickness = 2
+    
+    # Draw gold/orange line
     card_draw.line(
         [(margin_x + separator_padding, current_y), 
          (card_width - margin_x - separator_padding, current_y)], 
-        fill=(*gold_rgb, 150), 
-        width=2
+        fill=(*gold_rgb, 180), 
+        width=separator_thickness
     )
-    current_y += 25
+    
+    # Decorative dots
+    dot_size = 4
+    card_draw.ellipse(
+        [(margin_x + separator_padding - dot_size, current_y - dot_size),
+         (margin_x + separator_padding + dot_size, current_y + dot_size)],
+        fill=(*gold_rgb, 180)
+    )
+    card_draw.ellipse(
+        [(card_width - margin_x - separator_padding - dot_size, current_y - dot_size),
+         (card_width - margin_x - separator_padding + dot_size, current_y + dot_size)],
+        fill=(*gold_rgb, 180)
+    )
+    
+    current_y += int(60 * scale)  # Space after divider
 
-    # Draw translation
+    # Draw translation - BIGGER text
     if translation_text and trans_lines:
-        translation_font = get_font(22)
-        translation_line_height = 32
-
         for line in trans_lines:
             bbox = card_draw.textbbox((0, 0), line, font=translation_font)
             line_width = bbox[2] - bbox[0]
@@ -410,35 +395,25 @@ def generate_ayah_image(
             current_y += translation_line_height
 
     # Draw footer branding
-    footer_y = card_height - 45
-    footer_font = get_font(16)
+    footer_y = card_height - 50
+    footer_font = get_font(20)
     
-    # Draw a subtle footer line
-    card_draw.line(
-        [(margin_x, footer_y - 15), (card_width - margin_x, footer_y - 15)],
-        fill=(*text_secondary_rgb, 50),
-        width=1
-    )
-    
-    # Branding text
-    branding = "📖 Quran Reader  •  islam-llm.app"
-    brand_bbox = card_draw.textbbox((0, 0), branding, font=footer_font)
-    brand_width = brand_bbox[2] - brand_bbox[0]
-    footer_x = (card_width - brand_width) // 2
+    footer_text = "Quran Reader  •  islam-llm.app"
+    footer_bbox = card_draw.textbbox((0, 0), footer_text, font=footer_font)
+    footer_width = footer_bbox[2] - footer_bbox[0]
+    footer_x = (card_width - footer_width) // 2
+
     card_draw.text(
         (footer_x, footer_y), 
-        branding, 
-        fill=(*text_secondary_rgb, 180), 
+        footer_text, 
+        fill=(*text_secondary_rgb, 150), 
         font=footer_font
     )
 
-    # Paste card onto main canvas (centered)
+    # Paste card onto canvas
     card_x = SHADOW_EXPAND
     card_y = SHADOW_EXPAND
-    
-    # Create rounded mask for card
-    card_mask = create_rounded_rectangle_mask((card_width, card_height), CORNER_RADIUS)
-    img.paste(card, (card_x, card_y), card_mask)
+    img.paste(card, (card_x, card_y), card)
 
     return img
 
@@ -449,48 +424,38 @@ def generate_ayah_image_bytes(
     surah_name,
     surah_number,
     ayah_number,
+    surah_english_name="",
     edition_name="",
     square=False,
-    format="PNG"
+    portrait=False,
+    format="png"
 ):
-    """
-    Generate an ayah image and return as bytes.
-
+    """Generate the image and return it as bytes.
+    
     Args:
-        arabic_text: The Arabic text of the ayah
-        translation_text: The translation text
-        surah_name: Name of the surah (Arabic)
-        surah_number: Surah number
-        ayah_number: Ayah number within the surah
-        edition_name: Name of the translation edition
-        square: If True, generate a square image
-        format: Image format (PNG, JPEG, etc.)
-
-    Returns:
-        BytesIO object containing the image
+        portrait: If True, generate 9:16 portrait for mobile stories (WhatsApp, Snapchat, etc.)
     """
     img = generate_ayah_image(
-        arabic_text=arabic_text,
-        translation_text=translation_text,
-        surah_name=surah_name,
-        surah_number=surah_number,
-        ayah_number=ayah_number,
+        arabic_text,
+        translation_text,
+        surah_name,
+        surah_number,
+        ayah_number,
+        surah_english_name=surah_english_name,
         edition_name=edition_name,
-        square=square
+        square=square,
+        portrait=portrait
     )
-
+    
     buffer = BytesIO()
     
-    # For PNG, save with transparency
-    if format.upper() == "PNG":
-        img.save(buffer, format="PNG")
+    if format.lower() == "jpg" or format.lower() == "jpeg":
+        rgb_img = Image.new('RGB', img.size, (255, 247, 237))  # Light orange background
+        rgb_img.paste(img, mask=img.split()[3])
+        rgb_img.save(buffer, format='JPEG', quality=95)
     else:
-        # For JPEG, convert to RGB and add white background
-        if img.mode == 'RGBA':
-            background = Image.new('RGB', img.size, (255, 255, 255))
-            background.paste(img, mask=img.split()[3])  # Use alpha channel as mask
-            img = background
-        img.save(buffer, format=format, quality=95)
+        img.save(buffer, format='PNG', optimize=True)
     
     buffer.seek(0)
-    return buffer
+    return buffer.getvalue()
+

@@ -887,12 +887,14 @@ def get_ayah_share_image(
     edition: str = Query("quran-uthmani", description="Arabic text edition"),
     translation: str = Query("en.sahih", description="Translation edition"),
     square: bool = Query(False, description="Generate square image for Instagram"),
+    portrait: bool = Query(False, description="Generate 9:16 portrait for mobile stories"),
     format: str = Query("png", description="Image format (png or jpeg)")
 ):
     """
     Generate a beautiful, artistic shareable image for an ayah.
 
     Returns an optimized image suitable for sharing on social media platforms.
+    Supports: landscape (default), square (Instagram), portrait (WhatsApp/Snapchat stories)
     """
     conn = get_db_connection()
     try:
@@ -953,8 +955,10 @@ def get_ayah_share_image(
             surah_name=surah["name"],
             surah_number=surah_id,
             ayah_number=ayah_number,
+            surah_english_name=surah["english_name"],
             edition_name=edition,
             square=square,
+            portrait=portrait,
             format=image_format
         )
 
@@ -963,11 +967,11 @@ def get_ayah_share_image(
         filename = f"surah-{surah_id}-ayah-{ayah_number}.{format.lower()}"
 
         return Response(
-            content=image_bytes.read(),
+            content=image_bytes,
             media_type=media_type,
             headers={
                 "Content-Disposition": f'inline; filename="{filename}"',
-                "Cache-Control": "public, max-age=86400",  # Cache for 24 hours
+                "Cache-Control": "no-cache, no-store, must-revalidate",  # No caching for fresh images
             }
         )
 
@@ -1037,11 +1041,11 @@ def get_ayah_share_image_by_id(
         filename = f"ayah-{ayah_id}.{format.lower()}"
 
         return Response(
-            content=image_bytes.read(),
+            content=image_bytes,
             media_type=media_type,
             headers={
                 "Content-Disposition": f'inline; filename="{filename}"',
-                "Cache-Control": "public, max-age=86400",
+                "Cache-Control": "no-cache, no-store, must-revalidate",
             }
         )
 

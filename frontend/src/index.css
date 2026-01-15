@@ -462,7 +462,13 @@ body {
     z-index: 1000;
     opacity: 0;
     visibility: hidden;
-    transition: all 0.3s ease;
+    padding: 20px;
+    box-sizing: border-box;
+    /* GPU acceleration */
+    transform: translateZ(0);
+    will-change: opacity;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
 }
 
 .modal-overlay.show {
@@ -547,21 +553,25 @@ body {
 
 .share-image-preview {
     width: 100%;
-    aspect-ratio: 16 / 9;
-    background: #f0f0f0;
+    background: #f5f5f5;
     border-radius: var(--radius-md);
     overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 150px;
 }
 
 .share-image-preview img {
     width: 100%;
-    height: 100%;
+    height: auto;
     object-fit: contain;
+    max-height: 300px;
 }
 
 .share-options {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
     gap: 10px;
 }
 
@@ -569,13 +579,14 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 12px 16px;
+    gap: 6px;
+    padding: 12px 12px;
     border-radius: var(--radius-md);
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
+    white-space: nowrap;
 }
 
 .share-btn:hover {
@@ -585,6 +596,72 @@ body {
 
 .share-btn svg {
     flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+}
+
+/* Share modal specific styles */
+.share-modal {
+    max-width: 500px;
+    width: 90%;
+}
+
+/* Mobile share modal styles */
+@media (max-width: 600px) {
+    .modal-overlay {
+        padding: 0 !important;
+        align-items: flex-start !important;
+        justify-content: center !important;
+        padding-top: 0 !important;
+        overflow-y: auto;
+    }
+
+    .modal-content,
+    .share-modal {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        max-height: 100vh;
+        border-radius: 0;
+        min-height: 100vh;
+    }
+
+    .modal-header {
+        padding: 16px;
+        position: sticky;
+        top: 0;
+        background: var(--bg-white);
+        z-index: 10;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .modal-body {
+        padding: 16px;
+    }
+
+    .share-image-preview {
+        min-height: 150px;
+    }
+
+    .share-image-preview img {
+        max-height: 250px;
+    }
+
+    .share-options {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .share-btn {
+        padding: 12px 10px;
+        font-size: 0.8rem;
+        gap: 6px;
+    }
+
+    .share-btn svg {
+        width: 16px;
+        height: 16px;
+    }
 }
 
 /* =============================================================================

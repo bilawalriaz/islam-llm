@@ -377,13 +377,15 @@ export async function getBookmarksForSurah(surahId) {
  * @param {number} ayahNumber - Ayah number within the surah
  * @param {string} translation - Translation edition identifier
  * @param {boolean} square - Whether to generate a square image
+ * @param {boolean} portrait - Whether to generate a 9:16 portrait image
  * @param {string} format - Image format (png or jpeg)
  * @returns {string} The URL for the share image
  */
-export function getAyahShareImageUrl(surahId, ayahNumber, translation = 'en.sahih', square = false, format = 'png') {
+export function getAyahShareImageUrl(surahId, ayahNumber, translation = 'en.sahih', square = false, portrait = false, format = 'png') {
     const params = new URLSearchParams({
         translation,
         square: square.toString(),
+        portrait: portrait.toString(),
         format,
     });
     return `/api/share/ayah/${surahId}/${ayahNumber}?${params.toString()}`;
