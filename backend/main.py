@@ -2,7 +2,7 @@
 Quran Reader API - Backend Server
 
 FastAPI server that serves Quran data from SQLite database
-and provides audio file streaming with user authentication,
+and provides audio file streaming with user authentication via Supabase,
 bookmarks, and progress tracking.
 """
 
@@ -21,10 +21,19 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from share_image import generate_ayah_image_bytes
 
-# Database path
+# Supabase integration
+from supabase import create_client, Client
+
+# Database paths
 DB_PATH = Path(__file__).parent.parent / "quran-dump" / "quran.db"
 AUDIO_PATH = Path(__file__).parent.parent / "quran-dump" / "audio"
-TOKEN_EXPIRY_DAYS = 30
+
+# Supabase configuration
+SUPABASE_URL = "https://zxmyoojcuihavbhiblwc.supabase.co"
+SUPABASE_KEY = os.environ.get("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4bXlvb2pjdWloYXZiaGlibHdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1MDMwODAsImV4cCI6MjA4NDA3OTA4MH0.WTrrU42RBAW1rIxukNsVDYZ5ifYMiuQe_nlpEPgkjsM")
+
+# Create Supabase client for public operations
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = FastAPI(title="Quran Reader API")
 
@@ -51,19 +60,14 @@ if AUDIO_PATH.exists():
 
 
 def get_db_connection():
-    """Create a database connection."""
+    """Create a database connection for Quran data."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def hash_password(password: str) -> str:
-    """Hash a password using SHA-256."""
-    return hashlib.sha256(password.encode()).hexdigest()
-
-
-def verify_token(authorization: str = Header(None)) -> Optional[int]:
-    """Verify authorization token and return user_id."""
+async def verify_token(authorization: str = Header(None)) -> Optional[str]:
+    """Verify Supabase JWT token and return user_id (UUID)."""
     if not authorization:
         return None
 
@@ -72,45 +76,35 @@ def verify_token(authorization: str = Header(None)) -> Optional[int]:
 
     token = authorization[7:]  # Remove "Bearer " prefix
 
-    conn = get_db_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT user_id, expires_at
-            FROM session_tokens
-            WHERE token = ?
-        """, (token,))
-        row = cursor.fetchone()
-
-        if not row:
-            return None
-
-        # Check if token is expired
-        if row["expires_at"]:
-            expires_at = datetime.fromisoformat(row["expires_at"])
-            if expires_at < datetime.now():
-                return None
-
-        return row["user_id"]
-    finally:
-        conn.close()
+        # Verify the JWT token with Supabase
+        user = supabase.auth.get_user(token)
+        if user and user.user:
+            return user.user.id
+        return None
+    except Exception:
+        return None
 
 
-def get_current_user(user_id: int = Depends(verify_token)):
-    """Get current user from token."""
+async def get_current_user(user_id: str = Depends(verify_token)):
+    """Get current user profile from Supabase."""
     if user_id is None:
         raise HTTPException(status_code=401, detail="Invalid or missing token")
 
-    conn = get_db_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, name, email, created_at FROM users WHERE id = ?", (user_id,))
-        user = cursor.fetchone()
-        if not user:
+        response = supabase.table("profiles").select("*").eq("id", user_id).single().execute()
+
+        if not response.data:
             raise HTTPException(status_code=401, detail="User not found")
-        return dict(user)
-    finally:
-        conn.close()
+
+        return {
+            "id": response.data["id"],
+            "name": response.data.get("name", ""),
+            "email": response.data.get("email", ""),
+            "created_at": response.data.get("created_at", "")
+        }
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"User not found: {str(e)}")
 
 
 # =============================================================================
@@ -278,7 +272,7 @@ def get_ayah_audio(ayah_number: int, edition: str = Query("ar.alafasy")):
 
 
 # =============================================================================
-# AUTH ENDPOINTS
+# AUTH ENDPOINTS (Supabase)
 # =============================================================================
 
 class LoginRequest(BaseModel):
@@ -293,96 +287,84 @@ class RegisterRequest(BaseModel):
 
 
 @app.post("/api/auth/register")
-def register(data: RegisterRequest):
-    """Register a new user."""
-    conn = get_db_connection()
+async def register(data: RegisterRequest):
+    """Register a new user using Supabase Auth."""
     try:
-        cursor = conn.cursor()
+        # Create user in Supabase Auth
+        response = supabase.auth.sign_up({
+            "email": data.email,
+            "password": data.password,
+            "options": {
+                "data": {
+                    "name": data.name
+                }
+            }
+        })
 
-        # Check if user already exists
-        cursor.execute("SELECT id FROM users WHERE email = ?", (data.email,))
-        if cursor.fetchone():
-            raise HTTPException(status_code=400, detail="Email already registered")
+        if not response.user:
+            raise HTTPException(status_code=400, detail="Failed to create user")
 
-        # Create new user
-        password_hash = hash_password(data.password)
-        cursor.execute("""
-            INSERT INTO users (name, email, password_hash)
-            VALUES (?, ?, ?)
-        """, (data.name, data.email, password_hash))
-        conn.commit()
-
-        user_id = cursor.lastrowid
-
-        return {"user": {"id": user_id, "name": data.name, "email": data.email}}
-    except sqlite3.IntegrityError:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    finally:
-        conn.close()
+        return {
+            "user": {
+                "id": response.user.id,
+                "name": data.name,
+                "email": data.email
+            },
+            "session": {
+                "access_token": response.session.access_token if response.session else None,
+                "refresh_token": response.session.refresh_token if response.session else None
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Registration failed: {str(e)}")
 
 
 @app.post("/api/auth/login")
-def login(data: LoginRequest):
-    """Login user."""
-    conn = get_db_connection()
+async def login(data: LoginRequest):
+    """Login user using Supabase Auth."""
     try:
-        cursor = conn.cursor()
-        password_hash = hash_password(data.password)
+        response = supabase.auth.sign_in_with_password({
+            "email": data.email,
+            "password": data.password
+        })
 
-        # Find user
-        cursor.execute("""
-            SELECT id, name, email, password_hash
-            FROM users
-            WHERE email = ?
-        """, (data.email,))
-        user = cursor.fetchone()
-
-        if not user or user["password_hash"] != password_hash:
+        if not response.user or not response.session:
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
-        # Create session token
-        token = secrets.token_urlsafe(32)
-        expires_at = (datetime.now() + timedelta(days=TOKEN_EXPIRY_DAYS)).isoformat()
-
-        cursor.execute("""
-            INSERT INTO session_tokens (user_id, token, expires_at)
-            VALUES (?, ?, ?)
-        """, (user["id"], token, expires_at))
-        conn.commit()
+        # Get user profile for name
+        profile_response = supabase.table("profiles").select("name").eq("id", response.user.id).single().execute()
 
         return {
-            "user": {"id": user["id"], "name": user["name"], "email": user["email"]},
-            "session_token": token
+            "user": {
+                "id": response.user.id,
+                "name": profile_response.data.get("name", "") if profile_response.data else "",
+                "email": response.user.email
+            },
+            "session": {
+                "access_token": response.session.access_token,
+                "refresh_token": response.session.refresh_token
+            }
         }
-    finally:
-        conn.close()
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
 
 
 @app.post("/api/auth/logout")
-def logout(authorization: str = Header(None)):
-    """Logout user."""
-    if not authorization or not authorization.startswith("Bearer "):
-        return {"success": True}
-
-    token = authorization[7:]
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM session_tokens WHERE token = ?", (token,))
-        conn.commit()
-        return {"success": True}
-    finally:
-        conn.close()
+async def logout():
+    """Logout user - client should discard tokens."""
+    # With Supabase, token management is primarily client-side
+    # The client should discard the access_token and refresh_token
+    return {"success": True}
 
 
 @app.get("/api/auth/me")
-def get_current_user_endpoint(current_user: dict = Depends(get_current_user)):
+async def get_current_user_endpoint(current_user: dict = Depends(get_current_user)):
     """Get current user."""
     return {"user": current_user}
 
 
 # =============================================================================
-# BOOKMARKS ENDPOINTS
+# BOOKMARKS ENDPOINTS (Supabase + SQLite)
 # =============================================================================
 
 class BookmarkRequest(BaseModel):
@@ -392,106 +374,109 @@ class BookmarkRequest(BaseModel):
 
 
 @app.get("/api/bookmarks")
-def get_bookmarks(current_user: dict = Depends(get_current_user)):
+async def get_bookmarks(current_user: dict = Depends(get_current_user)):
     """Get all bookmarks for the current user."""
+    # Get bookmarks from Supabase
+    response = supabase.table("bookmarks").select("*").eq("user_id", current_user["id"]).order("created_at", desc=True).execute()
+
+    if not response.data:
+        return []
+
+    bookmarks = response.data
+
+    # Enrich with Quran data from SQLite
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        # Get edition ID for Arabic text (Uthmani)
         cursor.execute("SELECT id FROM editions WHERE identifier = ?", ("quran-uthmani",))
         edition_row = cursor.fetchone()
         edition_id = edition_row[0] if edition_row else 1
 
-        cursor.execute("""
-            SELECT b.id, b.ayah_id, b.surah_id, b.ayah_number_in_surah,
-                   b.created_at,
-                   s.name as surah_name, s.english_name, s.english_name_translation,
-                   s.revelation_type, s.number_of_ayahs,
-                   a.text as ayah_text
-            FROM bookmarks b
-            JOIN surahs s ON b.surah_id = s.id
-            LEFT JOIN ayahs a ON a.id = b.ayah_id
-            WHERE b.user_id = ?
-            ORDER BY b.created_at DESC
-        """, (current_user["id"],))
-        bookmarks = cursor.fetchall()
-        return [dict(row) for row in bookmarks]
+        enriched_bookmarks = []
+        for bm in bookmarks:
+            # Get surah info
+            cursor.execute("""
+                SELECT name, english_name, english_name_translation, revelation_type, number_of_ayahs
+                FROM surahs
+                WHERE id = ?
+            """, (bm["surah_id"],))
+            surah = cursor.fetchone()
+
+            # Get ayah text
+            cursor.execute("""
+                SELECT text
+                FROM ayahs
+                WHERE id = ?
+            """, (bm["ayah_id"],))
+            ayah = cursor.fetchone()
+
+            enriched_bookmarks.append({
+                "id": bm["id"],
+                "ayah_id": bm["ayah_id"],
+                "surah_id": bm["surah_id"],
+                "ayah_number_in_surah": bm["ayah_number_in_surah"],
+                "created_at": bm["created_at"],
+                "surah_name": surah["name"] if surah else "",
+                "english_name": surah["english_name"] if surah else "",
+                "english_name_translation": surah["english_name_translation"] if surah else "",
+                "revelation_type": surah["revelation_type"] if surah else "",
+                "number_of_ayahs": surah["number_of_ayahs"] if surah else 0,
+                "ayah_text": ayah["text"] if ayah else ""
+            })
+
+        return enriched_bookmarks
     finally:
         conn.close()
 
 
 @app.post("/api/bookmarks")
-def create_bookmark(
+async def create_bookmark(
     data: BookmarkRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    """Create a new bookmark."""
-    conn = get_db_connection()
+    """Create a new bookmark in Supabase."""
     try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO bookmarks (user_id, ayah_id, surah_id, ayah_number_in_surah)
-            VALUES (?, ?, ?, ?)
-        """, (current_user["id"], data.ayah_id, data.surah_id, data.ayah_number_in_surah))
-        conn.commit()
-        return {"success": True, "id": cursor.lastrowid}
-    except sqlite3.IntegrityError:
-        # Already bookmarked
-        return {"success": True, "id": -1}
-    finally:
-        conn.close()
+        response = supabase.table("bookmarks").insert({
+            "user_id": current_user["id"],
+            "ayah_id": data.ayah_id,
+            "surah_id": data.surah_id,
+            "ayah_number_in_surah": data.ayah_number_in_surah
+        }).execute()
+
+        return {"success": True, "id": response.data[0]["id"] if response.data else None}
+    except Exception as e:
+        # Likely duplicate bookmark
+        return {"success": True, "id": None}
 
 
 @app.delete("/api/bookmarks/{bookmark_id}")
-def delete_bookmark(bookmark_id: int, current_user: dict = Depends(get_current_user)):
-    """Delete a bookmark."""
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            DELETE FROM bookmarks
-            WHERE id = ? AND user_id = ?
-        """, (bookmark_id, current_user["id"]))
-        conn.commit()
-        return {"success": True}
-    finally:
-        conn.close()
+async def delete_bookmark(bookmark_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a bookmark from Supabase."""
+    supabase.table("bookmarks").delete().eq("id", bookmark_id).eq("user_id", current_user["id"]).execute()
+    return {"success": True}
 
 
 @app.get("/api/bookmarks/exists/{ayah_id}")
-def check_bookmark(ayah_id: int, current_user: dict = Depends(get_current_user)):
+async def check_bookmark(ayah_id: int, current_user: dict = Depends(get_current_user)):
     """Check if an ayah is bookmarked."""
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id FROM bookmarks
-            WHERE user_id = ? AND ayah_id = ?
-        """, (current_user["id"], ayah_id))
-        result = cursor.fetchone()
-        return {"bookmarked": result is not None, "bookmark_id": result["id"] if result else None}
-    finally:
-        conn.close()
+    response = supabase.table("bookmarks").select("id").eq("user_id", current_user["id"]).eq("ayah_id", ayah_id).execute()
+
+    bookmarked = len(response.data) > 0
+    bookmark_id = response.data[0]["id"] if bookmarked else None
+
+    return {"bookmarked": bookmarked, "bookmark_id": bookmark_id}
+
 
 @app.get("/api/bookmarks/surah/{surah_id}")
-def get_bookmarks_for_surah(surah_id: int, current_user: dict = Depends(get_current_user)):
+async def get_bookmarks_for_surah(surah_id: int, current_user: dict = Depends(get_current_user)):
     """Get all bookmarks for a specific surah (batch endpoint). Returns map of ayah_id -> bookmark_id."""
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT ayah_id, id
-            FROM bookmarks
-            WHERE user_id = ? AND surah_id = ?
-        """, (current_user["id"], surah_id))
-        results = cursor.fetchall()
-        return {row["ayah_id"]: row["id"] for row in results}
-    finally:
-        conn.close()
+    response = supabase.table("bookmarks").select("ayah_id", "id").eq("user_id", current_user["id"]).eq("surah_id", surah_id).execute()
+
+    return {bm["ayah_id"]: bm["id"] for bm in response.data}
 
 
 # =============================================================================
-# PROGRESS TRACKING ENDPOINTS
+# PROGRESS TRACKING ENDPOINTS (Supabase + SQLite)
 # =============================================================================
 
 class ProgressUpdateRequest(BaseModel):
@@ -501,192 +486,173 @@ class ProgressUpdateRequest(BaseModel):
 
 
 @app.post("/api/progress")
-def update_progress(
+async def update_progress(
     data: ProgressUpdateRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    """Update reading progress for a surah."""
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
+    """Update reading progress for a surah in Supabase."""
+    today = datetime.now().strftime("%Y-%m-%d")
 
-        # Check if progress exists for this surah
-        cursor.execute("""
-            SELECT id, last_read_ayah_id, total_ayahs_read
-            FROM reading_progress
-            WHERE user_id = ? AND surah_id = ?
-        """, (current_user["id"], data.surah_id))
-        existing = cursor.fetchone()
+    # Check if progress exists
+    existing = supabase.table("reading_progress").select("*").eq("user_id", current_user["id"]).eq("surah_id", data.surah_id).execute()
 
-        today = datetime.now().strftime("%Y-%m-%d")
+    if existing.data:
+        # Update existing progress
+        supabase.table("reading_progress").update({
+            "last_read_ayah_id": data.ayah_id,
+            "last_read_ayah_number": data.ayah_number,
+            "last_read_date": today,
+            "updated_at": datetime.now().isoformat()
+        }).eq("user_id", current_user["id"]).eq("surah_id", data.surah_id).execute()
 
-        if existing:
-            # Update existing progress
-            cursor.execute("""
-                UPDATE reading_progress
-                SET last_read_ayah_id = ?,
-                    last_read_ayah_number = ?,
-                    last_read_date = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE user_id = ? AND surah_id = ?
-            """, (data.ayah_id, data.ayah_number, today, current_user["id"], data.surah_id))
+        # Track daily reading if different ayah
+        if existing.data[0]["last_read_ayah_id"] != data.ayah_id:
+            daily = supabase.table("daily_readings").select("*").eq("user_id", current_user["id"]).eq("read_date", today).execute()
+            if daily.data:
+                supabase.table("daily_readings").update({"ayahs_read": daily.data[0]["ayahs_read"] + 1}).eq("user_id", current_user["id"]).eq("read_date", today).execute()
+            else:
+                supabase.table("daily_readings").insert({"user_id": current_user["id"], "read_date": today, "ayahs_read": 1}).execute()
+    else:
+        # Create new progress record
+        supabase.table("reading_progress").insert({
+            "user_id": current_user["id"],
+            "surah_id": data.surah_id,
+            "last_read_ayah_id": data.ayah_id,
+            "last_read_ayah_number": data.ayah_number,
+            "total_ayahs_read": 1,
+            "last_read_date": today
+        }).execute()
 
-            # Track daily reading (increment if reading a different ayah)
-            if existing["last_read_ayah_id"] != data.ayah_id:
-                cursor.execute("""
-                    INSERT INTO daily_readings (user_id, read_date, ayahs_read)
-                    VALUES (?, ?, 1)
-                    ON CONFLICT(user_id, read_date)
-                    DO UPDATE SET ayahs_read = ayahs_read + 1
-                """, (current_user["id"], today))
-
-            conn.commit()
+        # Track daily reading
+        daily = supabase.table("daily_readings").select("*").eq("user_id", current_user["id"]).eq("read_date", today).execute()
+        if daily.data:
+            supabase.table("daily_readings").update({"ayahs_read": daily.data[0]["ayahs_read"] + 1}).eq("user_id", current_user["id"]).eq("read_date", today).execute()
         else:
-            # Create new progress record
-            cursor.execute("""
-                INSERT INTO reading_progress
-                (user_id, surah_id, last_read_ayah_id, last_read_ayah_number, total_ayahs_read, last_read_date)
-                VALUES (?, ?, ?, ?, 1, ?)
-            """, (current_user["id"], data.surah_id, data.ayah_id, data.ayah_number, today))
+            supabase.table("daily_readings").insert({"user_id": current_user["id"], "read_date": today, "ayahs_read": 1}).execute()
 
-            # Track daily reading
-            cursor.execute("""
-                INSERT INTO daily_readings (user_id, read_date, ayahs_read)
-                VALUES (?, ?, 1)
-                ON CONFLICT(user_id, read_date)
-                DO UPDATE SET ayahs_read = ayahs_read + 1
-            """, (current_user["id"], today))
-
-            conn.commit()
-
-        return {"success": True}
-    finally:
-        conn.close()
+    return {"success": True}
 
 
 @app.get("/api/progress")
-def get_progress(current_user: dict = Depends(get_current_user)):
+async def get_progress(current_user: dict = Depends(get_current_user)):
     """Get all reading progress for the current user."""
+    # Get progress from Supabase
+    response = supabase.table("reading_progress").select("*").eq("user_id", current_user["id"]).order("updated_at", desc=True).execute()
+
+    if not response.data:
+        return []
+
+    progress = response.data
+
+    # Enrich with surah data from SQLite
     conn = get_db_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT rp.surah_id, rp.last_read_ayah_id, rp.last_read_ayah_number,
-                   rp.total_ayahs_read, rp.last_read_date, rp.updated_at,
-                   s.name as surah_name, s.english_name, s.number_of_ayahs
-            FROM reading_progress rp
-            JOIN surahs s ON rp.surah_id = s.id
-            WHERE rp.user_id = ?
-            ORDER BY rp.updated_at DESC
-        """, (current_user["id"],))
-        progress = cursor.fetchall()
-        return [dict(row) for row in progress]
+        enriched = []
+        for p in progress:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT name, english_name, number_of_ayahs
+                FROM surahs
+                WHERE id = ?
+            """, (p["surah_id"],))
+            surah = cursor.fetchone()
+
+            enriched.append({
+                "surah_id": p["surah_id"],
+                "last_read_ayah_id": p["last_read_ayah_id"],
+                "last_read_ayah_number": p["last_read_ayah_number"],
+                "total_ayahs_read": p["total_ayahs_read"],
+                "last_read_date": p["last_read_date"],
+                "updated_at": p["updated_at"],
+                "surah_name": surah["name"] if surah else "",
+                "english_name": surah["english_name"] if surah else "",
+                "number_of_ayahs": surah["number_of_ayahs"] if surah else 0
+            })
+
+        return enriched
     finally:
         conn.close()
 
 
 @app.get("/api/progress/stats")
-def get_progress_stats(current_user: dict = Depends(get_current_user)):
-    """Get reading statistics for the current user."""
+async def get_progress_stats(current_user: dict = Depends(get_current_user)):
+    """Get reading statistics for the current user from Supabase."""
+    # Total ayahs read
+    daily_response = supabase.table("daily_readings").select("ayahs_read").eq("user_id", current_user["id"]).execute()
+    total_ayahs = sum(d["ayahs_read"] for d in daily_response.data) if daily_response.data else 0
+
+    # Total surahs with progress
+    progress_response = supabase.table("reading_progress").select("surah_id").eq("user_id", current_user["id"]).execute()
+    total_surahs = len(set(p["surah_id"] for p in progress_response.data)) if progress_response.data else 0
+
+    # Total bookmarks
+    bookmarks_response = supabase.table("bookmarks").select("id").eq("user_id", current_user["id"]).execute()
+    total_bookmarks = len(bookmarks_response.data) if bookmarks_response.data else 0
+
+    # Calculate reading streak
+    daily_dates_response = supabase.table("daily_readings").select("read_date").eq("user_id", current_user["id"]).order("read_date", desc=True).limit(365).execute()
+    streak = 0
+
+    if daily_dates_response.data:
+        dates = sorted(list(set(d["read_date"] for d in daily_dates_response.data)), reverse=True)
+        today = datetime.now().strftime("%Y-%m-%d")
+        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        if dates and (dates[0] == today or dates[0] == yesterday):
+            streak = 1
+            expected_date = (datetime.now() - timedelta(days=1 if dates[0] == today else 2)).strftime("%Y-%m-%d")
+
+            for date in dates[1:]:
+                if date == expected_date:
+                    streak += 1
+                    expected_date = (datetime.strptime(expected_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+                else:
+                    break
+
+    return {
+        "total_ayahs_read": total_ayahs,
+        "total_surahs_read": total_surahs,
+        "total_bookmarks": total_bookmarks,
+        "reading_streak": streak
+    }
+
+
+@app.get("/api/progress/last-position")
+async def get_last_position(current_user: dict = Depends(get_current_user)):
+    """Get the last reading position for resuming."""
+    response = supabase.table("reading_progress").select("*").eq("user_id", current_user["id"]).order("updated_at", desc=True).limit(1).execute()
+
+    if not response.data:
+        return None
+
+    p = response.data[0]
+
+    # Enrich with surah data from SQLite
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-
-        # Total unique ayahs read - sum from daily readings
         cursor.execute("""
-            SELECT COALESCE(SUM(ayahs_read), 0) as total_ayahs
-            FROM daily_readings
-            WHERE user_id = ?
-        """, (current_user["id"],))
-        total_ayahs = cursor.fetchone()["total_ayahs"] or 0
-
-        # Total surahs with progress
-        cursor.execute("""
-            SELECT COUNT(DISTINCT surah_id) as total_surahs
-            FROM reading_progress
-            WHERE user_id = ?
-        """, (current_user["id"],))
-        total_surahs = cursor.fetchone()["total_surahs"] or 0
-
-        # Total bookmarks
-        cursor.execute("""
-            SELECT COUNT(*) as total_bookmarks
-            FROM bookmarks
-            WHERE user_id = ?
-        """, (current_user["id"],))
-        total_bookmarks = cursor.fetchone()["total_bookmarks"] or 0
-
-        # Calculate reading streak
-        cursor.execute("""
-            SELECT read_date
-            FROM daily_readings
-            WHERE user_id = ?
-            ORDER BY read_date DESC
-            LIMIT 365
-        """, (current_user["id"],))
-        daily_readings = cursor.fetchall()
-
-        streak = 0
-        if daily_readings:
-            # Get unique dates
-            dates = [r["read_date"] for r in daily_readings]
-            unique_dates = sorted(list(set(dates)), reverse=True)
-
-            today = datetime.now().strftime("%Y-%m-%d")
-            yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-
-            # Start streak if we have reading for today or yesterday
-            if unique_dates and (unique_dates[0] == today or unique_dates[0] == yesterday):
-                streak = 1
-                # Count consecutive days going backwards
-                expected_date = (datetime.now() - timedelta(days=1 if unique_dates[0] == today else 2)).strftime("%Y-%m-%d")
-
-                for date in unique_dates[1:]:
-                    if date == expected_date:
-                        streak += 1
-                        # Move to previous day
-                        expected_date = (datetime.strptime(expected_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
-                    else:
-                        break
+            SELECT name, english_name, number_of_ayahs
+            FROM surahs
+            WHERE id = ?
+        """, (p["surah_id"],))
+        surah = cursor.fetchone()
 
         return {
-            "total_ayahs_read": total_ayahs,
-            "total_surahs_read": total_surahs,
-            "total_bookmarks": total_bookmarks,
-            "reading_streak": streak
+            "surah_id": p["surah_id"],
+            "last_read_ayah_id": p["last_read_ayah_id"],
+            "last_read_ayah_number": p["last_read_ayah_number"],
+            "last_read_date": p["last_read_date"],
+            "surah_name": surah["name"] if surah else "",
+            "english_name": surah["english_name"] if surah else "",
+            "number_of_ayahs": surah["number_of_ayahs"] if surah else 0
         }
     finally:
         conn.close()
 
 
-@app.get("/api/progress/last-position")
-def get_last_position(current_user: dict = Depends(get_current_user)):
-    """Get the last reading position for resuming."""
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT rp.surah_id, rp.last_read_ayah_id, rp.last_read_ayah_number,
-                   rp.last_read_date,
-                   s.name as surah_name, s.english_name, s.number_of_ayahs
-            FROM reading_progress rp
-            JOIN surahs s ON rp.surah_id = s.id
-            WHERE rp.user_id = ?
-            ORDER BY rp.updated_at DESC
-            LIMIT 1
-        """, (current_user["id"],))
-        position = cursor.fetchone()
-
-        if not position:
-            return None
-
-        return dict(position)
-    finally:
-        conn.close()
-
-
 # =============================================================================
-# COMPLETION TRACKING ENDPOINTS
+# COMPLETION TRACKING ENDPOINTS (Supabase + SQLite)
 # =============================================================================
 
 class CompleteAyahRequest(BaseModel):
@@ -696,125 +662,116 @@ class CompleteAyahRequest(BaseModel):
 
 
 @app.post("/api/completed-ayahs")
-def mark_ayah_completed(
+async def mark_ayah_completed(
     data: CompleteAyahRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    """Mark an ayah as completed (when audio finishes)."""
-    conn = get_db_connection()
+    """Mark an ayah as completed in Supabase."""
     try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO completed_ayahs (user_id, ayah_id, surah_id, ayah_number)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(user_id, ayah_id) DO NOTHING
-        """, (current_user["id"], data.ayah_id, data.surah_id, data.ayah_number))
-        conn.commit()
-        return {"success": True}
-    finally:
-        conn.close()
+        supabase.table("completed_ayahs").insert({
+            "user_id": current_user["id"],
+            "ayah_id": data.ayah_id,
+            "surah_id": data.surah_id,
+            "ayah_number": data.ayah_number
+        }).execute()
+    except Exception:
+        # Already completed - ignore
+        pass
+    return {"success": True}
 
 
 @app.get("/api/completed-ayahs/surah/{surah_id}")
-def get_completed_ayahs_for_surah(
+async def get_completed_ayahs_for_surah(
     surah_id: int,
     current_user: dict = Depends(get_current_user)
 ):
-    """Get list of completed ayah IDs for a specific surah."""
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT ayah_id, ayah_number, completed_at
-            FROM completed_ayahs
-            WHERE user_id = ? AND surah_id = ?
-            ORDER BY ayah_number ASC
-        """, (current_user["id"], surah_id))
-        completed = cursor.fetchall()
-        return [dict(row) for row in completed]
-    finally:
-        conn.close()
+    """Get list of completed ayah IDs for a specific surah from Supabase."""
+    response = supabase.table("completed_ayahs").select("ayah_id", "ayah_number", "completed_at").eq("user_id", current_user["id"]).eq("surah_id", surah_id).order("ayah_number").execute()
+    return response.data if response.data else []
 
 
 @app.get("/api/completed-ayahs/stats/{surah_id}")
-def get_surah_completion_stats(
+async def get_surah_completion_stats(
     surah_id: int,
     current_user: dict = Depends(get_current_user)
 ):
     """Get completion stats for a specific surah."""
+    # Get total ayahs in surah from SQLite
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-
-        # Get total ayahs in surah
-        cursor.execute("""
-            SELECT number_of_ayahs
-            FROM surahs
-            WHERE id = ?
-        """, (surah_id,))
+        cursor.execute("SELECT number_of_ayahs FROM surahs WHERE id = ?", (surah_id,))
         surah = cursor.fetchone()
         if not surah:
             raise HTTPException(status_code=404, detail="Surah not found")
 
         total_ayahs = surah["number_of_ayahs"]
-
-        # Get completed count
-        cursor.execute("""
-            SELECT COUNT(*) as completed_count
-            FROM completed_ayahs
-            WHERE user_id = ? AND surah_id = ?
-        """, (current_user["id"], surah_id))
-        completed_count = cursor.fetchone()["completed_count"]
-
-        # Get first unread ayah
-        cursor.execute("""
-            SELECT MIN(a.number_in_surah) as first_unread
-            FROM ayahs a
-            LEFT JOIN completed_ayahs ca ON ca.ayah_id = a.id AND ca.user_id = ?
-            WHERE a.surah_id = ? AND ca.ayah_id IS NULL
-        """, (current_user["id"], surah_id))
-        first_unread = cursor.fetchone()["first_unread"]
-
-        # Get list of completed ayah numbers
-        cursor.execute("""
-            SELECT ayah_number
-            FROM completed_ayahs
-            WHERE user_id = ? AND surah_id = ?
-            ORDER BY ayah_number ASC
-        """, (current_user["id"], surah_id))
-        completed_numbers = [row["ayah_number"] for row in cursor.fetchall()]
-
-        return {
-            "total_ayahs": total_ayahs,
-            "completed_count": completed_count,
-            "completion_percentage": round((completed_count / total_ayahs) * 100, 1) if total_ayahs > 0 else 0,
-            "first_unread_ayah": first_unread,
-            "completed_ayah_numbers": completed_numbers
-        }
     finally:
         conn.close()
 
+    # Get completed count from Supabase
+    completed_response = supabase.table("completed_ayahs").select("ayah_id", "ayah_number").eq("user_id", current_user["id"]).eq("surah_id", surah_id).execute()
+    completed_count = len(completed_response.data) if completed_response.data else 0
+    completed_numbers = [c["ayah_number"] for c in completed_response.data] if completed_response.data else []
 
-@app.get("/api/completed-ayahs/first-unread")
-def get_first_unread_ayah(current_user: dict = Depends(get_current_user)):
-    """Get the first unread ayah across all surahs (for global resume)."""
+    # Get first unread ayah from SQLite
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
+        if completed_numbers:
+            placeholders = ",".join("?" * len(completed_numbers))
+            cursor.execute(f"""
+                SELECT MIN(number_in_surah) as first_unread
+                FROM ayahs
+                WHERE surah_id = ? AND number_in_surah NOT IN ({placeholders})
+            """, [surah_id] + completed_numbers)
+            first_unread = cursor.fetchone()["first_unread"]
+        else:
+            cursor.execute("SELECT MIN(number_in_surah) as first_unread FROM ayahs WHERE surah_id = ?", (surah_id,))
+            first_unread = cursor.fetchone()["first_unread"]
+    finally:
+        conn.close()
 
-        # Find the first surah with any progress that has unread ayahs
-        cursor.execute("""
-            SELECT rp.surah_id, s.name as surah_name, s.english_name, s.number_of_ayahs,
-                   MIN(a.number_in_surah) as first_unread_ayah
-            FROM reading_progress rp
-            JOIN surahs s ON s.id = rp.surah_id
-            JOIN ayahs a ON a.surah_id = rp.surah_id
-            LEFT JOIN completed_ayahs ca ON ca.ayah_id = a.id AND ca.user_id = rp.user_id
-            WHERE rp.user_id = ? AND ca.ayah_id IS NULL
-            GROUP BY rp.surah_id
-            ORDER BY rp.updated_at DESC
-            LIMIT 1
-        """, (current_user["id"],))
+    return {
+        "total_ayahs": total_ayahs,
+        "completed_count": completed_count,
+        "completion_percentage": round((completed_count / total_ayahs) * 100, 1) if total_ayahs > 0 else 0,
+        "first_unread_ayah": first_unread,
+        "completed_ayah_numbers": completed_numbers
+    }
+
+
+@app.get("/api/completed-ayahs/first-unread")
+async def get_first_unread_ayah(current_user: dict = Depends(get_current_user)):
+    """Get the first unread ayah across all surahs (for global resume)."""
+    # Get all completed ayahs from Supabase
+    completed_response = supabase.table("completed_ayahs").select("ayah_id").eq("user_id", current_user["id"]).execute()
+    completed_ayah_ids = [c["ayah_id"] for c in completed_response.data] if completed_response.data else []
+
+    # Get first unread ayah from SQLite
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        if completed_ayah_ids:
+            placeholders = ",".join("?" * len(completed_ayah_ids))
+            cursor.execute(f"""
+                SELECT a.surah_id, a.number_in_surah as first_unread_ayah,
+                       s.name as surah_name, s.english_name, s.number_of_ayahs
+                FROM ayahs a
+                JOIN surahs s ON s.id = a.surah_id
+                WHERE a.id NOT IN ({placeholders})
+                ORDER BY a.surah_id, a.number_in_surah
+                LIMIT 1
+            """, completed_ayah_ids)
+        else:
+            cursor.execute("""
+                SELECT a.surah_id, a.number_in_surah as first_unread_ayah,
+                       s.name as surah_name, s.english_name, s.number_of_ayahs
+                FROM ayahs a
+                JOIN surahs s ON s.id = a.surah_id
+                ORDER BY a.surah_id, a.number_in_surah
+                LIMIT 1
+            """)
         result = cursor.fetchone()
 
         if not result:
@@ -826,89 +783,80 @@ def get_first_unread_ayah(current_user: dict = Depends(get_current_user)):
 
 
 @app.get("/api/completed-ayahs/overall-stats")
-def get_overall_completion_stats(current_user: dict = Depends(get_current_user)):
-    """Get overall completion statistics across all surahs."""
+async def get_overall_completion_stats(current_user: dict = Depends(get_current_user)):
+    """Get overall completion statistics across all surahs from Supabase."""
+    total_quran_ayahs = 6236
+
+    # Get completed ayahs count
+    completed_response = supabase.table("completed_ayahs").select("ayah_id").eq("user_id", current_user["id"]).execute()
+    completed_count = len(completed_response.data) if completed_response.data else 0
+
+    # Get completed surahs count
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
+        cursor.execute("SELECT id, number_of_ayahs FROM surahs")
+        all_surahs = cursor.fetchall()
 
-        # Total ayahs in Quran
-        total_quran_ayahs = 6236
+        completed_surahs = 0
+        if completed_response.data:
+            # Group completed ayahs by surah
+            surah_completion = {}
+            for c in completed_response.data:
+                surah_id = c["surah_id"]
+                if surah_id not in surah_completion:
+                    surah_completion[surah_id] = 0
+                surah_completion[surah_id] += 1
 
-        # Get completed ayahs count
-        cursor.execute("""
-            SELECT COUNT(*) as completed_count
-            FROM completed_ayahs
-            WHERE user_id = ?
-        """, (current_user["id"],))
-        completed_count = cursor.fetchone()["completed_count"]
-
-        # Get completed surahs (100% complete)
-        cursor.execute("""
-            SELECT COUNT(*) as completed_surahs
-            FROM (
-                SELECT surah_id, COUNT(*) as completed
-                FROM completed_ayahs
-                WHERE user_id = ?
-                GROUP BY surah_id
-                JOIN surahs s ON s.id = surah_id
-                WHERE completed >= s.number_of_ayahs
-            )
-        """, (current_user["id"],))
-
-        # Alternative query for completed surahs
-        cursor.execute("""
-            SELECT COUNT(DISTINCT ca.surah_id) as completed_surahs
-            FROM completed_ayahs ca
-            JOIN surahs s ON s.id = ca.surah_id
-            WHERE ca.user_id = ?
-            GROUP BY ca.surah_id
-            HAVING COUNT(*) >= s.number_of_ayahs
-        """, (current_user["id"],))
-        completed_surahs_result = cursor.fetchone()
-        completed_surahs = completed_surahs_result["completed_surahs"] if completed_surahs_result else 0
-
-        return {
-            "total_ayahs_in_quran": total_quran_ayahs,
-            "ayahs_completed": completed_count,
-            "completion_percentage": round((completed_count / total_quran_ayahs) * 100, 1),
-            "surahs_fully_completed": completed_surahs
-        }
+            # Count fully completed surahs
+            for surah in all_surahs:
+                if surah_completion.get(surah["id"], 0) >= surah["number_of_ayahs"]:
+                    completed_surahs += 1
     finally:
         conn.close()
 
+    return {
+        "total_ayahs_in_quran": total_quran_ayahs,
+        "ayahs_completed": completed_count,
+        "completion_percentage": round((completed_count / total_quran_ayahs) * 100, 1),
+        "surahs_fully_completed": completed_surahs
+    }
+
 
 # =============================================================================
-# SEQUENTIAL PROGRESS ENDPOINTS
+# SEQUENTIAL PROGRESS ENDPOINTS (Supabase + SQLite)
 # =============================================================================
 
 @app.get("/api/progress/sequential")
-def get_sequential_progress(current_user: dict = Depends(get_current_user)):
+async def get_sequential_progress(current_user: dict = Depends(get_current_user)):
     """
     Get true sequential progress - only count ayahs where ALL previous ayahs are complete.
     Returns first incomplete ayah and accurate completion percentage.
     """
+    # Get completed ayahs with is_sequential flag from Supabase
+    response = supabase.table("completed_ayahs").select("*").eq("user_id", current_user["id"]).eq("is_sequential", True).execute()
+    sequential_count = len(response.data) if response.data else 0
+
+    # Get all completed ayah IDs
+    all_completed = supabase.table("completed_ayahs").select("ayah_id").eq("user_id", current_user["id"]).execute()
+    completed_ayah_ids = [c["ayah_id"] for c in all_completed.data] if all_completed.data else []
+
+    # Find first incomplete ayah from SQLite
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-
-        # Get sequential completion count
-        cursor.execute("""
-            SELECT COUNT(*) as count
-            FROM completed_ayahs
-            WHERE user_id = ? AND is_sequential = 1
-        """, (current_user["id"],))
-        sequential_count = cursor.fetchone()["count"]
-
-        # Find first incomplete ayah
-        cursor.execute("""
-            SELECT MIN(a.number) as ayah_num, MIN(a.surah_id) as surah_id, MIN(a.number_in_surah) as ayah_in_surah
-            FROM ayahs a
-            LEFT JOIN completed_ayahs ca ON ca.ayah_id = a.id AND ca.user_id = ? AND ca.is_sequential = 1
-            WHERE ca.ayah_id IS NULL
-            ORDER BY a.surah_id, a.number_in_surah
-            LIMIT 1
-        """, (current_user["id"],))
+        if completed_ayah_ids:
+            placeholders = ",".join("?" * len(completed_ayah_ids))
+            cursor.execute(f"""
+                SELECT MIN(a.number) as ayah_num, MIN(a.surah_id) as surah_id, MIN(a.number_in_surah) as ayah_in_surah
+                FROM ayahs a
+                WHERE a.id NOT IN ({placeholders})
+            """, completed_ayah_ids)
+        else:
+            cursor.execute("""
+                SELECT MIN(number) as ayah_num, MIN(surah_id) as surah_id, MIN(number_in_surah) as ayah_in_surah
+                FROM ayahs
+            """)
         first_incomplete = cursor.fetchone()
 
         return {
@@ -923,62 +871,49 @@ def get_sequential_progress(current_user: dict = Depends(get_current_user)):
 
 
 @app.post("/api/progress/validate-sequential")
-def validate_sequential_progress(current_user: dict = Depends(get_current_user)):
+async def validate_sequential_progress(current_user: dict = Depends(get_current_user)):
     """
-    Recalculate sequential progress flags.
-    Call this when ayah is marked complete or on demand.
+    Recalculate sequential progress flags in Supabase.
     """
+    # Get all completed ayahs
+    completed = supabase.table("completed_ayahs").select("ayah_id").eq("user_id", current_user["id"]).execute()
+    completed_ayah_ids = [c["ayah_id"] for c in completed.data] if completed.data else []
+
+    # Get all ayahs in order from SQLite
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-
-        # Reset all sequential flags
         cursor.execute("""
-            UPDATE completed_ayahs
-            SET is_sequential = 0
-            WHERE user_id = ?
-        """, (current_user["id"],))
+            SELECT id, surah_id, number_in_surah, number
+            FROM ayahs
+            ORDER BY surah_id, number_in_surah
+        """)
+        all_ayahs = cursor.fetchall()
 
-        # Mark ayahs as sequential where all previous are complete
-        # For each completed ayah, check if all ayahs before it are also complete
-        cursor.execute("""
-            WITH numbered_ayahs AS (
-                SELECT a.id, a.surah_id, a.number_in_surah, a.number,
-                       ROW_NUMBER() OVER (ORDER BY a.surah_id, a.number_in_surah) as global_order
-                FROM ayahs a
-            ),
-            completed_ordered AS (
-                SELECT na.id, na.global_order
-                FROM numbered_ayahs na
-                JOIN completed_ayahs ca ON ca.ayah_id = na.id
-                WHERE ca.user_id = ?
-            )
-            UPDATE completed_ayahs
-            SET is_sequential = 1
-            WHERE user_id = ? AND ayah_id IN (
-                SELECT co1.id
-                FROM completed_ordered co1
-                WHERE NOT EXISTS (
-                    SELECT 1
-                    FROM numbered_ayahs na
-                    WHERE na.global_order < co1.global_order
-                    AND NOT EXISTS (
-                        SELECT 1
-                        FROM completed_ordered co2
-                        WHERE co2.id = na.id
-                    )
-                )
-            )
-        """, (current_user["id"], current_user["id"]))
+        # Calculate which ayahs are sequential (all previous ones are complete)
+        sequential_ids = []
+        completed_set = set(completed_ayah_ids)
 
-        conn.commit()
+        for i, ayah in enumerate(all_ayahs):
+            if ayah["id"] in completed_set:
+                # Check if all previous ayahs are also complete
+                all_previous_complete = all(a["id"] in completed_set for a in all_ayahs[:i])
+                if all_previous_complete:
+                    sequential_ids.append(ayah["id"])
+
+        # Reset all sequential flags and update
+        supabase.table("completed_ayahs").update({"is_sequential": False}).eq("user_id", current_user["id"]).execute()
+
+        for ayah_id in sequential_ids:
+            supabase.table("completed_ayahs").update({"is_sequential": True}).eq("user_id", current_user["id"]).eq("ayah_id", ayah_id).execute()
+
         return {"success": True}
     finally:
         conn.close()
 
 
 # =============================================================================
-# AUDIO ANALYTICS ENDPOINTS
+# AUDIO ANALYTICS ENDPOINTS (Supabase + SQLite)
 # =============================================================================
 
 class PlaySessionStart(BaseModel):
@@ -988,118 +923,143 @@ class PlaySessionStart(BaseModel):
     audio_edition: str = "ar.alafasy"
 
 class PlaySessionEnd(BaseModel):
-    session_id: int
+    session_id: str  # UUID in Supabase
     duration_seconds: int
 
 
 @app.post("/api/analytics/play-start")
-def start_play_session(data: PlaySessionStart, current_user: dict = Depends(get_current_user)):
-    """Track when user starts playing an ayah."""
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO play_sessions (user_id, ayah_id, surah_id, ayah_number, audio_edition)
-            VALUES (?, ?, ?, ?, ?)
-        """, (current_user["id"], data.ayah_id, data.surah_id, data.ayah_number, data.audio_edition))
-        conn.commit()
-        return {"success": True, "session_id": cursor.lastrowid}
-    finally:
-        conn.close()
+async def start_play_session(data: PlaySessionStart, current_user: dict = Depends(get_current_user)):
+    """Track when user starts playing an ayah in Supabase."""
+    response = supabase.table("play_sessions").insert({
+        "user_id": current_user["id"],
+        "ayah_id": data.ayah_id,
+        "surah_id": data.surah_id,
+        "ayah_number": data.ayah_number,
+        "audio_edition": data.audio_edition
+    }).execute()
+
+    return {"success": True, "session_id": response.data[0]["id"] if response.data else None}
 
 
 @app.post("/api/analytics/play-end")
-def end_play_session(data: PlaySessionEnd, current_user: dict = Depends(get_current_user)):
+async def end_play_session(data: PlaySessionEnd, current_user: dict = Depends(get_current_user)):
     """Track when user finishes playing an ayah (updates duration)."""
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT ayah_id FROM play_sessions
-            WHERE id = ? AND user_id = ?
-        """, (data.session_id, current_user["id"]))
-        session = cursor.fetchone()
+    # Get session to find ayah_id
+    session = supabase.table("play_sessions").select("ayah_id").eq("id", data.session_id).eq("user_id", current_user["id"]).execute()
 
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
+    if not session.data:
+        raise HTTPException(status_code=404, detail="Session not found")
 
-        cursor.execute("""
-            UPDATE play_sessions
-            SET completed_at = CURRENT_TIMESTAMP, duration_seconds = ?
-            WHERE id = ?
-        """, (data.duration_seconds, data.session_id))
+    ayah_id = session.data[0]["ayah_id"]
 
-        # Update replay stats
-        cursor.execute("""
-            INSERT INTO replay_stats (user_id, ayah_id, play_count, total_duration_seconds, last_played_at)
-            VALUES (?, ?, 1, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT(user_id, ayah_id)
-            DO UPDATE SET
-                play_count = play_count + 1,
-                total_duration_seconds = total_duration_seconds + ?,
-                last_played_at = CURRENT_TIMESTAMP
-        """, (current_user["id"], session["ayah_id"], data.duration_seconds, data.duration_seconds))
+    # Update play session
+    supabase.table("play_sessions").update({
+        "completed_at": datetime.now().isoformat(),
+        "duration_seconds": data.duration_seconds
+    }).eq("id", data.session_id).execute()
 
-        conn.commit()
-        return {"success": True}
-    finally:
-        conn.close()
+    # Update replay stats in Supabase
+    existing = supabase.table("replay_stats").select("*").eq("user_id", current_user["id"]).eq("ayah_id", ayah_id).execute()
+
+    if existing.data:
+        supabase.table("replay_stats").update({
+            "play_count": existing.data[0]["play_count"] + 1,
+            "total_duration_seconds": existing.data[0]["total_duration_seconds"] + data.duration_seconds,
+            "last_played_at": datetime.now().isoformat()
+        }).eq("user_id", current_user["id"]).eq("ayah_id", ayah_id).execute()
+    else:
+        supabase.table("replay_stats").insert({
+            "user_id": current_user["id"],
+            "ayah_id": ayah_id,
+            "play_count": 1,
+            "total_duration_seconds": data.duration_seconds,
+            "last_played_at": datetime.now().isoformat()
+        }).execute()
+
+    return {"success": True}
 
 
 @app.get("/api/analytics/replay-stats")
-def get_replay_stats_endpoint(current_user: dict = Depends(get_current_user), limit: int = 10):
-    """Get most replayed ayahs (highest play count)."""
+async def get_replay_stats_endpoint(current_user: dict = Depends(get_current_user), limit: int = 10):
+    """Get most replayed ayahs (highest play count) from Supabase."""
+    response = supabase.table("replay_stats").select("*").eq("user_id", current_user["id"]).order("play_count", desc=True).limit(limit).execute()
+
+    if not response.data:
+        return []
+
+    # Enrich with Quran data from SQLite
     conn = get_db_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT rs.ayah_id, rs.play_count, rs.total_duration_seconds,
-                   a.number_in_surah, a.surah_id,
-                   s.name as surah_name, s.english_name
-            FROM replay_stats rs
-            JOIN ayahs a ON a.id = rs.ayah_id
-            JOIN surahs s ON s.id = a.surah_id
-            WHERE rs.user_id = ?
-            ORDER BY rs.play_count DESC
-            LIMIT ?
-        """, (current_user["id"], limit))
-        return [dict(row) for row in cursor.fetchall()]
+        enriched = []
+        for rs in response.data:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT a.number_in_surah, a.surah_id,
+                       s.name as surah_name, s.english_name
+                FROM ayahs a
+                JOIN surahs s ON s.id = a.surah_id
+                WHERE a.id = ?
+            """, (rs["ayah_id"],))
+            result = cursor.fetchone()
+
+            if result:
+                enriched.append({
+                    "ayah_id": rs["ayah_id"],
+                    "play_count": rs["play_count"],
+                    "total_duration_seconds": rs["total_duration_seconds"],
+                    "number_in_surah": result["number_in_surah"],
+                    "surah_id": result["surah_id"],
+                    "surah_name": result["surah_name"],
+                    "english_name": result["english_name"]
+                })
+
+        return enriched
     finally:
         conn.close()
 
 
 # =============================================================================
-# FULL QURAN PLAY MODE ENDPOINTS
+# FULL QURAN PLAY MODE ENDPOINTS (Supabase + SQLite)
 # =============================================================================
 
 @app.post("/api/quran-play/start")
-def start_quran_play(current_user: dict = Depends(get_current_user)):
+async def start_quran_play(current_user: dict = Depends(get_current_user)):
     """Start a full Quran play session from first incomplete ayah."""
+    # Get all completed ayah IDs from Supabase
+    completed = supabase.table("completed_ayahs").select("ayah_id").eq("user_id", current_user["id"]).execute()
+    completed_ayah_ids = [c["ayah_id"] for c in completed.data] if completed.data else []
+
+    # Get first incomplete ayah from SQLite
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-
-        # Get first incomplete ayah
-        cursor.execute("""
-            SELECT MIN(a.surah_id) as surah_id, MIN(a.number_in_surah) as ayah_num
-            FROM ayahs a
-            LEFT JOIN completed_ayahs ca ON ca.ayah_id = a.id AND ca.user_id = ?
-            WHERE ca.ayah_id IS NULL
-        """, (current_user["id"],))
+        if completed_ayah_ids:
+            placeholders = ",".join("?" * len(completed_ayah_ids))
+            cursor.execute(f"""
+                SELECT MIN(a.surah_id) as surah_id, MIN(a.number_in_surah) as ayah_num
+                FROM ayahs a
+                WHERE a.id NOT IN ({placeholders})
+            """, completed_ayah_ids)
+        else:
+            cursor.execute("""
+                SELECT MIN(surah_id) as surah_id, MIN(number_in_surah) as ayah_num
+                FROM ayahs
+            """)
         result = cursor.fetchone()
 
         start_surah = result["surah_id"] if result and result["surah_id"] else 1
         start_ayah = result["ayah_num"] if result and result["ayah_num"] else 1
 
-        cursor.execute("""
-            INSERT INTO quran_play_sessions (user_id, start_surah_id, start_ayah_number)
-            VALUES (?, ?, ?)
-        """, (current_user["id"], start_surah, start_ayah))
-        conn.commit()
+        # Create session in Supabase
+        response = supabase.table("quran_play_sessions").insert({
+            "user_id": current_user["id"],
+            "start_surah_id": start_surah,
+            "start_ayah_number": start_ayah
+        }).execute()
 
         return {
             "success": True,
-            "session_id": cursor.lastrowid,
+            "session_id": response.data[0]["id"] if response.data else None,
             "start_surah": start_surah,
             "start_ayah": start_ayah
         }
@@ -1109,7 +1069,7 @@ def start_quran_play(current_user: dict = Depends(get_current_user)):
 
 @app.get("/api/quran-play/next-ayah/{surah_id}/{ayah_number}")
 def get_next_quran_ayah(surah_id: int, ayah_number: int):
-    """Get next ayah in Quran order (crosses surah boundaries)."""
+    """Get next ayah in Quran order (crosses surah boundaries). Uses SQLite for Quran data."""
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -1164,20 +1124,13 @@ def get_next_quran_ayah(surah_id: int, ayah_number: int):
 
 
 @app.post("/api/quran-play/end/{session_id}")
-def end_quran_play_endpoint(session_id: int, current_user: dict = Depends(get_current_user)):
-    """End a Quran play session."""
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE quran_play_sessions
-            SET ended_at = CURRENT_TIMESTAMP
-            WHERE id = ? AND user_id = ?
-        """, (session_id, current_user["id"]))
-        conn.commit()
-        return {"success": True}
-    finally:
-        conn.close()
+async def end_quran_play_endpoint(session_id: str, current_user: dict = Depends(get_current_user)):
+    """End a Quran play session in Supabase."""
+    supabase.table("quran_play_sessions").update({
+        "ended_at": datetime.now().isoformat()
+    }).eq("id", session_id).eq("user_id", current_user["id"]).execute()
+
+    return {"success": True}
 
 
 # =============================================================================
