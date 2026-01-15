@@ -534,7 +534,7 @@ def generate_ayah_image(
     footer_y = card_height - 50
     footer_font = get_font(20)
     
-    footer_text = "Quran Reader  •  islam-llm.app"
+    footer_text = "Quran Reader  •  2026"
     footer_bbox = card_draw.textbbox((0, 0), footer_text, font=footer_font)
     footer_width = footer_bbox[2] - footer_bbox[0]
     footer_x = (card_width - footer_width) // 2

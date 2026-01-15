@@ -329,6 +329,98 @@ export async function getAllSurahsProgress() {
 }
 
 // =============================================================================
+// SEQUENTIAL PROGRESS API
+// =============================================================================
+
+/**
+ * Get sequential progress (true Quran completion percentage)
+ * Only counts ayahs where ALL previous ayahs are complete
+ */
+export async function getSequentialProgress() {
+    return fetchAPI('/progress/sequential');
+}
+
+/**
+ * Validate and recalculate sequential progress flags
+ * Call this when an ayah is marked complete or on demand
+ */
+export async function validateSequentialProgress() {
+    return fetchAPI('/progress/validate-sequential', {
+        method: 'POST',
+    });
+}
+
+// =============================================================================
+// AUDIO ANALYTICS API
+// =============================================================================
+
+/**
+ * Start a play session (analytics tracking)
+ * Returns session_id to use when ending the session
+ */
+export async function startPlaySession(ayahId, surahId, ayahNumber, audioEdition = 'ar.alafasy') {
+    return fetchAPI('/analytics/play-start', {
+        method: 'POST',
+        body: JSON.stringify({
+            ayah_id: ayahId,
+            surah_id: surahId,
+            ayah_number: ayahNumber,
+            audio_edition: audioEdition
+        }),
+    });
+}
+
+/**
+ * End a play session with duration
+ * Updates replay stats aggregate
+ */
+export async function endPlaySession(sessionId, durationSeconds) {
+    return fetchAPI('/analytics/play-end', {
+        method: 'POST',
+        body: JSON.stringify({
+            session_id: sessionId,
+            duration_seconds: durationSeconds
+        }),
+    });
+}
+
+/**
+ * Get most replayed ayahs (highest play count)
+ */
+export async function getReplayStats(limit = 10) {
+    return fetchAPI(`/analytics/replay-stats?limit=${limit}`);
+}
+
+// =============================================================================
+// FULL QURAN PLAY MODE API
+// =============================================================================
+
+/**
+ * Start a full Quran play session from first incomplete ayah
+ */
+export async function startQuranPlay() {
+    return fetchAPI('/quran-play/start', {
+        method: 'POST',
+    });
+}
+
+/**
+ * Get next ayah in Quran order (crosses surah boundaries)
+ */
+export async function getNextQuranAyah(surahId, ayahNumber) {
+    return fetchAPI(`/quran-play/next-ayah/${surahId}/${ayahNumber}`);
+}
+
+/**
+ * End a Quran play session
+ */
+export async function endQuranPlay(sessionId) {
+    return fetchAPI(`/quran-play/end/${sessionId}`, {
+        method: 'POST',
+    });
+}
+
+// =============================================================================
 // FILE UPLOAD
 // =============================================================================
 

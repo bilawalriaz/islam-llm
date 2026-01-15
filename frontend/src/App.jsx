@@ -6,6 +6,7 @@ import Register from './pages/Register'
 import Home from './pages/Home'
 import Account from './pages/Account'
 import Progress from './pages/Progress'
+import Analytics from './pages/Analytics'
 import QuranHome from './pages/QuranHome'
 import SurahDetail from './pages/SurahDetail'
 
@@ -111,6 +112,18 @@ function AppRoutes() {
                 }
             >
                 <Route index element={<Progress />} />
+            </Route>
+
+            {/* Analytics page - protected route */}
+            <Route
+                path="/analytics"
+                element={
+                    <ProtectedRoute>
+                        <Layout />
+                    </ProtectedRoute>
+                }
+            >
+                <Route index element={<Analytics />} />
             </Route>
 
             {/* Catch all - redirect to home */}

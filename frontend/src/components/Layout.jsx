@@ -1,6 +1,7 @@
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { ContinueJourney } from './ContinueJourney';
 
 /**
  * Layout - Main app layout with header, navigation, and footer
@@ -66,9 +67,17 @@ function Layout() {
                                     Home
                                 </NavLink>
                                 {isAuthenticated && (
-                                    <NavLink to="/account" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={closeMobileMenu}>
-                                        Progress
-                                    </NavLink>
+                                    <>
+                                        <NavLink to="/account" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={closeMobileMenu}>
+                                            Progress
+                                        </NavLink>
+                                        <NavLink to="/analytics" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={closeMobileMenu}>
+                                            Analytics
+                                        </NavLink>
+                                        <div className="nav-continue-journey" onClick={closeMobileMenu}>
+                                            <ContinueJourney variant="compact" />
+                                        </div>
+                                    </>
                                 )}
                                 {/* Add more nav links here */}
                             </nav>

@@ -879,6 +879,308 @@ def get_overall_completion_stats(current_user: dict = Depends(get_current_user))
 
 
 # =============================================================================
+# SEQUENTIAL PROGRESS ENDPOINTS
+# =============================================================================
+
+@app.get("/api/progress/sequential")
+def get_sequential_progress(current_user: dict = Depends(get_current_user)):
+    """
+    Get true sequential progress - only count ayahs where ALL previous ayahs are complete.
+    Returns first incomplete ayah and accurate completion percentage.
+    """
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+
+        # Get sequential completion count
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM completed_ayahs
+            WHERE user_id = ? AND is_sequential = 1
+        """, (current_user["id"],))
+        sequential_count = cursor.fetchone()["count"]
+
+        # Find first incomplete ayah
+        cursor.execute("""
+            SELECT MIN(a.number) as ayah_num, MIN(a.surah_id) as surah_id, MIN(a.number_in_surah) as ayah_in_surah
+            FROM ayahs a
+            LEFT JOIN completed_ayahs ca ON ca.ayah_id = a.id AND ca.user_id = ? AND ca.is_sequential = 1
+            WHERE ca.ayah_id IS NULL
+            ORDER BY a.surah_id, a.number_in_surah
+            LIMIT 1
+        """, (current_user["id"],))
+        first_incomplete = cursor.fetchone()
+
+        return {
+            "sequential_completion_count": sequential_count,
+            "sequential_percentage": round((sequential_count / 6236) * 100, 2),
+            "first_incomplete_ayah": first_incomplete["ayah_in_surah"] if first_incomplete else 1,
+            "first_incomplete_surah": first_incomplete["surah_id"] if first_incomplete else 1,
+            "is_complete": sequential_count == 6236
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/api/progress/validate-sequential")
+def validate_sequential_progress(current_user: dict = Depends(get_current_user)):
+    """
+    Recalculate sequential progress flags.
+    Call this when ayah is marked complete or on demand.
+    """
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+
+        # Reset all sequential flags
+        cursor.execute("""
+            UPDATE completed_ayahs
+            SET is_sequential = 0
+            WHERE user_id = ?
+        """, (current_user["id"],))
+
+        # Mark ayahs as sequential where all previous are complete
+        # For each completed ayah, check if all ayahs before it are also complete
+        cursor.execute("""
+            WITH numbered_ayahs AS (
+                SELECT a.id, a.surah_id, a.number_in_surah, a.number,
+                       ROW_NUMBER() OVER (ORDER BY a.surah_id, a.number_in_surah) as global_order
+                FROM ayahs a
+            ),
+            completed_ordered AS (
+                SELECT na.id, na.global_order
+                FROM numbered_ayahs na
+                JOIN completed_ayahs ca ON ca.ayah_id = na.id
+                WHERE ca.user_id = ?
+            )
+            UPDATE completed_ayahs
+            SET is_sequential = 1
+            WHERE user_id = ? AND ayah_id IN (
+                SELECT co1.id
+                FROM completed_ordered co1
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM numbered_ayahs na
+                    WHERE na.global_order < co1.global_order
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM completed_ordered co2
+                        WHERE co2.id = na.id
+                    )
+                )
+            )
+        """, (current_user["id"], current_user["id"]))
+
+        conn.commit()
+        return {"success": True}
+    finally:
+        conn.close()
+
+
+# =============================================================================
+# AUDIO ANALYTICS ENDPOINTS
+# =============================================================================
+
+class PlaySessionStart(BaseModel):
+    ayah_id: int
+    surah_id: int
+    ayah_number: int
+    audio_edition: str = "ar.alafasy"
+
+class PlaySessionEnd(BaseModel):
+    session_id: int
+    duration_seconds: int
+
+
+@app.post("/api/analytics/play-start")
+def start_play_session(data: PlaySessionStart, current_user: dict = Depends(get_current_user)):
+    """Track when user starts playing an ayah."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO play_sessions (user_id, ayah_id, surah_id, ayah_number, audio_edition)
+            VALUES (?, ?, ?, ?, ?)
+        """, (current_user["id"], data.ayah_id, data.surah_id, data.ayah_number, data.audio_edition))
+        conn.commit()
+        return {"success": True, "session_id": cursor.lastrowid}
+    finally:
+        conn.close()
+
+
+@app.post("/api/analytics/play-end")
+def end_play_session(data: PlaySessionEnd, current_user: dict = Depends(get_current_user)):
+    """Track when user finishes playing an ayah (updates duration)."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT ayah_id FROM play_sessions
+            WHERE id = ? AND user_id = ?
+        """, (data.session_id, current_user["id"]))
+        session = cursor.fetchone()
+
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        cursor.execute("""
+            UPDATE play_sessions
+            SET completed_at = CURRENT_TIMESTAMP, duration_seconds = ?
+            WHERE id = ?
+        """, (data.duration_seconds, data.session_id))
+
+        # Update replay stats
+        cursor.execute("""
+            INSERT INTO replay_stats (user_id, ayah_id, play_count, total_duration_seconds, last_played_at)
+            VALUES (?, ?, 1, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id, ayah_id)
+            DO UPDATE SET
+                play_count = play_count + 1,
+                total_duration_seconds = total_duration_seconds + ?,
+                last_played_at = CURRENT_TIMESTAMP
+        """, (current_user["id"], session["ayah_id"], data.duration_seconds, data.duration_seconds))
+
+        conn.commit()
+        return {"success": True}
+    finally:
+        conn.close()
+
+
+@app.get("/api/analytics/replay-stats")
+def get_replay_stats_endpoint(current_user: dict = Depends(get_current_user), limit: int = 10):
+    """Get most replayed ayahs (highest play count)."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT rs.ayah_id, rs.play_count, rs.total_duration_seconds,
+                   a.number_in_surah, a.surah_id,
+                   s.name as surah_name, s.english_name
+            FROM replay_stats rs
+            JOIN ayahs a ON a.id = rs.ayah_id
+            JOIN surahs s ON s.id = a.surah_id
+            WHERE rs.user_id = ?
+            ORDER BY rs.play_count DESC
+            LIMIT ?
+        """, (current_user["id"], limit))
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+# =============================================================================
+# FULL QURAN PLAY MODE ENDPOINTS
+# =============================================================================
+
+@app.post("/api/quran-play/start")
+def start_quran_play(current_user: dict = Depends(get_current_user)):
+    """Start a full Quran play session from first incomplete ayah."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+
+        # Get first incomplete ayah
+        cursor.execute("""
+            SELECT MIN(a.surah_id) as surah_id, MIN(a.number_in_surah) as ayah_num
+            FROM ayahs a
+            LEFT JOIN completed_ayahs ca ON ca.ayah_id = a.id AND ca.user_id = ?
+            WHERE ca.ayah_id IS NULL
+        """, (current_user["id"],))
+        result = cursor.fetchone()
+
+        start_surah = result["surah_id"] if result and result["surah_id"] else 1
+        start_ayah = result["ayah_num"] if result and result["ayah_num"] else 1
+
+        cursor.execute("""
+            INSERT INTO quran_play_sessions (user_id, start_surah_id, start_ayah_number)
+            VALUES (?, ?, ?)
+        """, (current_user["id"], start_surah, start_ayah))
+        conn.commit()
+
+        return {
+            "success": True,
+            "session_id": cursor.lastrowid,
+            "start_surah": start_surah,
+            "start_ayah": start_ayah
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/api/quran-play/next-ayah/{surah_id}/{ayah_number}")
+def get_next_quran_ayah(surah_id: int, ayah_number: int):
+    """Get next ayah in Quran order (crosses surah boundaries)."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+
+        # Try next ayah in current surah
+        cursor.execute("""
+            SELECT number, surah_id, id, number_in_surah
+            FROM ayahs
+            WHERE surah_id = ? AND number_in_surah > ?
+            ORDER BY number_in_surah
+            LIMIT 1
+        """, (surah_id, ayah_number))
+        next_in_surah = cursor.fetchone()
+
+        if next_in_surah:
+            return {
+                "ayah_number": next_in_surah["number"],
+                "surah_id": next_in_surah["surah_id"],
+                "ayah_id": next_in_surah["id"],
+                "number_in_surah": next_in_surah["number_in_surah"],
+                "is_last": False
+            }
+
+        # Try first ayah of next surah
+        cursor.execute("""
+            SELECT MIN(id) as next_surah_id FROM surahs WHERE id > ?
+        """, (surah_id,))
+        next_surah = cursor.fetchone()
+
+        if next_surah and next_surah["next_surah_id"]:
+            cursor.execute("""
+                SELECT number, surah_id, id, number_in_surah
+                FROM ayahs
+                WHERE surah_id = ?
+                ORDER BY number_in_surah
+                LIMIT 1
+            """, (next_surah["next_surah_id"],))
+            first_ayah = cursor.fetchone()
+
+            if first_ayah:
+                return {
+                    "ayah_number": first_ayah["number"],
+                    "surah_id": first_ayah["surah_id"],
+                    "ayah_id": first_ayah["id"],
+                    "number_in_surah": first_ayah["number_in_surah"],
+                    "is_last": False
+                }
+
+        return {"is_last": True}
+    finally:
+        conn.close()
+
+
+@app.post("/api/quran-play/end/{session_id}")
+def end_quran_play_endpoint(session_id: int, current_user: dict = Depends(get_current_user)):
+    """End a Quran play session."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE quran_play_sessions
+            SET ended_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND user_id = ?
+        """, (session_id, current_user["id"]))
+        conn.commit()
+        return {"success": True}
+    finally:
+        conn.close()
+
+
+# =============================================================================
 # SHARE IMAGE ENDPOINTS
 # =============================================================================
 

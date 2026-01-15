@@ -3,13 +3,16 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
     getSurah, getAyahs, getAudioEditions, getEditions,
     checkBookmark, toggleBookmark, updateProgress, getBookmarksForSurah,
-    getCompletedAyahsForSurah, getSurahCompletionStats, markAyahCompleted
+    getCompletedAyahsForSurah, getSurahCompletionStats, markAyahCompleted,
+    startPlaySession, endPlaySession, startQuranPlay, getNextQuranAyah, endQuranPlay,
+    validateSequentialProgress
 } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { LoadingState, EmptyState } from '../components/Spinner';
 import Button from '../components/Button';
 import ShareButton from '../components/ShareButton';
 import Modal from '../components/Modal';
+import { useMediaSession } from '../hooks/useMediaSession';
 
 /**
  * Reciter name mapping - converts identifiers to human-readable names
@@ -98,6 +101,14 @@ function SurahDetail() {
     const [completedAyahs, setCompletedAyahs] = useState([]);
     const [completionStats, setCompletionStats] = useState(null);
 
+    // Play session tracking for analytics
+    const [currentSessionId, setCurrentSessionId] = useState(null);
+    const [sessionStartTime, setSessionStartTime] = useState(null);
+
+    // Full Quran play mode
+    const [quranPlayMode, setQuranPlayMode] = useState(false);
+    const [quranSessionId, setQuranSessionId] = useState(null);
+
     // Editions
     const [selectedAudioEdition, setSelectedAudioEdition] = useState('ar.alafasy');
     const [selectedTextEdition, setSelectedTextEdition] = useState('quran-uthmani');
@@ -125,6 +136,30 @@ function SurahDetail() {
         loadEditions();
         // Scroll to top when surah changes
         window.scrollTo({ top: 0, behavior: 'instant' });
+
+        // Check if we're continuing Quran play mode from previous surah
+        const quranMode = sessionStorage.getItem('quranPlayMode');
+        const sessionId = sessionStorage.getItem('quranSessionId');
+        const autoPlayState = sessionStorage.getItem('autoPlay');
+
+        if (quranMode === 'true' && sessionId && autoPlayState === 'true') {
+            // Restore Quran play mode state
+            setQuranPlayMode(true);
+            setQuranSessionId(parseInt(sessionId));
+            setAutoPlay(true);
+
+            // Clear sessionStorage
+            sessionStorage.removeItem('quranPlayMode');
+            sessionStorage.removeItem('quranSessionId');
+            sessionStorage.removeItem('autoPlay');
+
+            // Start playing first ayah of this surah after a short delay
+            setTimeout(() => {
+                if (ayahs.length > 0) {
+                    playAyah(0);
+                }
+            }, 500);
+        }
     }, [id]);
 
     useEffect(() => {
@@ -200,12 +235,24 @@ function SurahDetail() {
         const audio = audioRef.current;
         if (!audio) return;
 
-        const handleEnded = () => {
+        const handleEnded = async () => {
+            // End play session for analytics
+            if (currentSessionId && sessionStartTime) {
+                const duration = Math.round((Date.now() - sessionStartTime) / 1000);
+                try {
+                    await endPlaySession(currentSessionId, duration);
+                } catch (err) {
+                    console.error('Failed to end play session:', err);
+                }
+                setCurrentSessionId(null);
+                setSessionStartTime(null);
+            }
+
             if (playingAyah !== null) {
                 // Mark ayah as completed when audio finishes
                 const currentAyah = ayahs[playingAyah];
                 if (currentAyah) {
-                    markAyahAsCompleted(currentAyah);
+                    await markAyahAsCompleted(currentAyah);
                 }
 
                 // Check if loop mode is enabled - replay same ayah
@@ -214,7 +261,44 @@ function SurahDetail() {
                     return;
                 }
 
-                // Continue to next ayah if autoPlay is enabled
+                // Check if Quran play mode is enabled
+                if (quranPlayMode && autoPlay) {
+                    const currentAyah = ayahs[playingAyah];
+                    const nextData = await getNextQuranAyah(parseInt(id), currentAyah.number_in_surah);
+
+                    if (!nextData.is_last) {
+                        // Check if we need to navigate to different surah
+                        if (nextData.surah_id !== parseInt(id)) {
+                            navigate(`/quran/${nextData.surah_id}`);
+                            // Note: The new SurahDetail component will need to start playing
+                            // We use sessionStorage to pass the play state
+                            sessionStorage.setItem('quranPlayMode', 'true');
+                            sessionStorage.setItem('quranSessionId', quranSessionId);
+                            sessionStorage.setItem('autoPlay', 'true');
+                        } else {
+                            // Play next ayah in same surah
+                            const nextIndex = ayahs.findIndex(a => a.id === nextData.ayah_id);
+                            if (nextIndex >= 0) {
+                                playAyah(nextIndex);
+                            }
+                        }
+                    } else {
+                        // Quran complete!
+                        setQuranPlayMode(false);
+                        setAutoPlay(false);
+                        if (quranSessionId) {
+                            try {
+                                await endQuranPlay(quranSessionId);
+                            } catch (err) {
+                                console.error('Failed to end Quran play session:', err);
+                            }
+                            setQuranSessionId(null);
+                        }
+                    }
+                    return;
+                }
+
+                // Continue to next ayah if autoPlay is enabled (normal mode)
                 const nextAyah = playingAyah + 1;
                 if (nextAyah < ayahs.length) {
                     if (autoPlay) {
@@ -247,7 +331,7 @@ function SurahDetail() {
             audio.removeEventListener('ended', handleEnded);
             audio.removeEventListener('error', handleError);
         };
-    }, [autoPlay, loopAyah, playingAyah, ayahs]);
+    }, [autoPlay, loopAyah, playingAyah, ayahs, quranPlayMode, quranSessionId, currentSessionId, sessionStartTime, id, isAuthenticated, navigate]);
 
     // Save progress when playing ayah changes (with debounce)
     useEffect(() => {
@@ -384,6 +468,8 @@ function SurahDetail() {
         if (!isAuthenticated) return;
         try {
             await markAyahCompleted(ayah.id, parseInt(id), ayah.number_in_surah);
+            // Validate and update sequential progress flags
+            await validateSequentialProgress();
             // Update local state
             if (!completedAyahs.includes(ayah.number_in_surah)) {
                 setCompletedAyahs(prev => [...prev, ayah.number_in_surah]);
@@ -412,9 +498,21 @@ function SurahDetail() {
         if (audioRef.current) {
             audioRef.current.src = audioUrl;
             audioRef.current.play()
-                .then(() => {
+                .then(async () => {
                     lastPlayingAyahRef.current = index;
                     setPlayingAyah(index);
+
+                    // Track play session for analytics
+                    if (isAuthenticated) {
+                        try {
+                            const session = await startPlaySession(ayah.id, parseInt(id), ayah.number_in_surah, audioEdition);
+                            setCurrentSessionId(session.session_id);
+                            setSessionStartTime(Date.now());
+                        } catch (err) {
+                            console.error('Failed to track play session:', err);
+                        }
+                    }
+
                     // Preload next 2 ayahs after starting playback
                     // Defer preloading to avoid jank during transition (500ms delay)
                     setTimeout(() => {
@@ -469,6 +567,33 @@ function SurahDetail() {
             setPlayingAyah(null);
         }
     };
+
+    // Media Session API integration for lock screen controls
+    useMediaSession({
+        audioRef,
+        currentAyah: playingAyah !== null ? ayahs[playingAyah] : null,
+        surahName: surah?.english_name || '',
+        reciterName: getReciterName(selectedAudioEdition),
+        isPlaying: playingAyah !== null,
+        onPlay: () => {
+            if (playingAyah === null && lastPlayingAyahRef.current !== null) {
+                playAyah(lastPlayingAyahRef.current);
+            } else if (playingAyah !== null && audioRef.current) {
+                audioRef.current.play();
+            }
+        },
+        onPause: () => pauseAyah(),
+        onNext: () => {
+            if (playingAyah !== null && playingAyah < ayahs.length - 1) {
+                playAyah(playingAyah + 1);
+            }
+        },
+        onPrevious: () => {
+            if (playingAyah !== null && playingAyah > 0) {
+                playAyah(playingAyah - 1);
+            }
+        }
+    });
 
     const togglePlay = (index) => {
         if (playingAyah === index) {
@@ -541,12 +666,38 @@ function SurahDetail() {
                 </div>
                 <div className="page-header-actions">
                     {!autoPlay ? (
-                        <Button variant="success" onClick={playAll}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                            </svg>
-                            Play All
-                        </Button>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <Button variant="success" onClick={playAll}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                </svg>
+                                Play Surah
+                            </Button>
+                            <Button
+                                variant="primary"
+                                onClick={async () => {
+                                    if (isAuthenticated) {
+                                        try {
+                                            const session = await startQuranPlay();
+                                            setQuranSessionId(session.session_id);
+                                            setQuranPlayMode(true);
+                                            setAutoPlay(true);
+                                            playAyah(0);
+                                        } catch (err) {
+                                            console.error('Failed to start Quran play:', err);
+                                        }
+                                    } else {
+                                        navigate('/login');
+                                    }
+                                }}
+                                title="Play entire Quran from first incomplete ayah"
+                            >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                                </svg>
+                                Play Quran
+                            </Button>
+                        </div>
                     ) : (
                         <Button variant="danger" onClick={stopPlayback}>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
