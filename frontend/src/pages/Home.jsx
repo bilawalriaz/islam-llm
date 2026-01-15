@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Card } from '../components/Card';
+import { Timeline } from '../components/Timeline';
 import { useAuth } from '../contexts/AuthContext';
 
 /**
@@ -79,20 +80,7 @@ function Home() {
 
             {/* Features Timeline */}
             <section className="features-section">
-                <div className="timeline">
-                    <div className="timeline-line" />
-                    {features.map((feature, index) => (
-                        <div key={index} className="timeline-item">
-                            <div className="timeline-dot">
-                                <div className="timeline-icon">{feature.icon}</div>
-                            </div>
-                            <div className="timeline-content">
-                                <h3 className="timeline-title">{feature.title}</h3>
-                                <p className="timeline-description">{feature.description}</p>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                <Timeline data={features} />
             </section>
 
             {/* How to Use Section */}
