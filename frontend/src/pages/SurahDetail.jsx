@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import {
     getSurah, getAyahs, getAudioEditions, getEditions,
     checkBookmark, toggleBookmark, updateProgress, getBookmarksForSurah,
@@ -78,6 +78,7 @@ function getReciterName(identifier) {
 function SurahDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
     const { isAuthenticated } = useAuth();
 
     const [surah, setSurah] = useState(null);
@@ -92,6 +93,7 @@ function SurahDetail() {
     const [loopAyah, setLoopAyah] = useState(false);
     const [showSurahCompletion, setShowSurahCompletion] = useState(false);
     const [showOptions, setShowOptions] = useState(false);
+    const [highlightedAyah, setHighlightedAyah] = useState(null);
 
     // Bookmark state - map of ayah_id -> bookmark_id (or null if not bookmarked)
     const [bookmarks, setBookmarks] = useState({});
@@ -120,6 +122,8 @@ function SurahDetail() {
     const progressCardRef = useRef(null);
     const preloadedAudioRefs = useRef({});
     const lastPlayingAyahRef = useRef(null);
+    const hasScrolledToHashRef = useRef(false);
+    const initialSurahIdRef = useRef(id);
 
     // Floating progress indicator visibility state
     const [showFloatingProgress, setShowFloatingProgress] = useState(false);
@@ -134,8 +138,15 @@ function SurahDetail() {
     useEffect(() => {
         loadSurahData();
         loadEditions();
-        // Scroll to top when surah changes
-        window.scrollTo({ top: 0, behavior: 'instant' });
+
+        // Reset hash scroll tracking when surah changes
+        hasScrolledToHashRef.current = false;
+        initialSurahIdRef.current = id;
+
+        // Only scroll to top if there's no hash (deep link to specific ayah)
+        if (!location.hash) {
+            window.scrollTo({ top: 0, behavior: 'instant' });
+        }
 
         // Check if we're continuing Quran play mode from previous surah
         const quranMode = sessionStorage.getItem('quranPlayMode');
@@ -161,6 +172,43 @@ function SurahDetail() {
             }, 500);
         }
     }, [id]);
+
+    // Handle scrolling to a specific ayah based on URL hash (e.g., #ayah-7)
+    useEffect(() => {
+        if (loading || ayahs.length === 0 || hasScrolledToHashRef.current) return;
+
+        const hash = location.hash;
+        if (!hash) return;
+
+        // Parse hash like #ayah-7 to get ayah number
+        const match = hash.match(/^#ayah-(\d+)$/);
+        if (!match) return;
+
+        const ayahNumber = parseInt(match[1], 10);
+        // Find the index of the ayah with this number_in_surah
+        const targetIndex = ayahs.findIndex(a => a.number_in_surah === ayahNumber);
+
+        if (targetIndex >= 0 && ayahRefs.current[targetIndex]) {
+            // Mark as scrolled to prevent repeat scrolls
+            hasScrolledToHashRef.current = true;
+
+            // Highlight the ayah
+            setHighlightedAyah(targetIndex);
+
+            // Use requestAnimationFrame to ensure DOM is ready
+            requestAnimationFrame(() => {
+                ayahRefs.current[targetIndex]?.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center',
+                });
+            });
+
+            // Clear highlight after 3 seconds
+            setTimeout(() => {
+                setHighlightedAyah(null);
+            }, 3000);
+        }
+    }, [loading, ayahs, location.hash]);
 
     useEffect(() => {
         if (selectedTranslation !== 'none') {
@@ -723,96 +771,96 @@ function SurahDetail() {
 
             {/* Edition Controls - Hidden by default, toggle with settings button */}
             {showOptions && (
-            <div className="card mb-4">
-                <div className="card-body">
-                    <div className="d-flex flex-wrap gap-3">
-                        {/* Audio Reciter Selection */}
-                        <div style={{ flex: '1', minWidth: '220px' }}>
-                            <label className="form-label">Reciter</label>
-                            <select
-                                className="form-select"
-                                value={selectedAudioEdition}
-                                onChange={(e) => {
-                                    // Save current playing state (both playing and paused)
-                                    const wasPlaying = playingAyah !== null;
-                                    const currentAyahIndex = playingAyah !== null
-                                        ? playingAyah
-                                        : lastPlayingAyahRef.current;
-                                    const newEdition = e.target.value;
+                <div className="card mb-4">
+                    <div className="card-body">
+                        <div className="d-flex flex-wrap gap-3">
+                            {/* Audio Reciter Selection */}
+                            <div style={{ flex: '1', minWidth: '220px' }}>
+                                <label className="form-label">Reciter</label>
+                                <select
+                                    className="form-select"
+                                    value={selectedAudioEdition}
+                                    onChange={(e) => {
+                                        // Save current playing state (both playing and paused)
+                                        const wasPlaying = playingAyah !== null;
+                                        const currentAyahIndex = playingAyah !== null
+                                            ? playingAyah
+                                            : lastPlayingAyahRef.current;
+                                        const newEdition = e.target.value;
 
-                                    // Change reciter
-                                    setSelectedAudioEdition(newEdition);
+                                        // Change reciter
+                                        setSelectedAudioEdition(newEdition);
 
-                                    // If something was playing or paused, restart from the same ayah with new reciter
-                                    if (currentAyahIndex !== null && currentAyahIndex !== undefined) {
-                                        // Pass new edition directly to avoid race condition
-                                        playAyah(currentAyahIndex, newEdition);
-                                        // If it wasn't playing before, pause it after starting
-                                        if (!wasPlaying) {
-                                            pauseAyah();
+                                        // If something was playing or paused, restart from the same ayah with new reciter
+                                        if (currentAyahIndex !== null && currentAyahIndex !== undefined) {
+                                            // Pass new edition directly to avoid race condition
+                                            playAyah(currentAyahIndex, newEdition);
+                                            // If it wasn't playing before, pause it after starting
+                                            if (!wasPlaying) {
+                                                pauseAyah();
+                                            }
                                         }
-                                    }
-                                }}
-                            >
-                                {audioEditions.map(edition => (
-                                    <option key={edition.identifier} value={edition.identifier}>
-                                        {getReciterName(edition.identifier)}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        {/* Text Edition Selection */}
-                        <div style={{ flex: '1', minWidth: '200px' }}>
-                            <label className="form-label">Arabic Text</label>
-                            <select
-                                className="form-select"
-                                value={selectedTextEdition}
-                                onChange={(e) => handleTextEditionChange(e.target.value)}
-                            >
-                                {textEditions
-                                    .filter(e => e.language === 'ar' && e.type === 'quran')
-                                    .map(edition => (
+                                    }}
+                                >
+                                    {audioEditions.map(edition => (
                                         <option key={edition.identifier} value={edition.identifier}>
-                                            {edition.english_name}
+                                            {getReciterName(edition.identifier)}
                                         </option>
                                     ))}
-                            </select>
-                        </div>
+                                </select>
+                            </div>
 
-                        {/* Translation Selection */}
-                        <div style={{ flex: '1', minWidth: '200px' }}>
-                            <label className="form-label">Translation</label>
-                            <select
-                                className="form-select"
-                                value={selectedTranslation}
-                                onChange={(e) => setSelectedTranslation(e.target.value)}
-                            >
-                                <option value="none">No Translation</option>
-                                {textEditions
-                                    .filter(e => e.type === 'translation')
-                                    .map(edition => (
-                                        <option key={edition.identifier} value={edition.identifier}>
-                                            {edition.english_name}
-                                        </option>
-                                    ))}
-                            </select>
-                        </div>
+                            {/* Text Edition Selection */}
+                            <div style={{ flex: '1', minWidth: '200px' }}>
+                                <label className="form-label">Arabic Text</label>
+                                <select
+                                    className="form-select"
+                                    value={selectedTextEdition}
+                                    onChange={(e) => handleTextEditionChange(e.target.value)}
+                                >
+                                    {textEditions
+                                        .filter(e => e.language === 'ar' && e.type === 'quran')
+                                        .map(edition => (
+                                            <option key={edition.identifier} value={edition.identifier}>
+                                                {edition.english_name}
+                                            </option>
+                                        ))}
+                                </select>
+                            </div>
 
-                        {/* Auto-play Toggle */}
-                        <div className="align-center d-flex" style={{ paddingTop: '24px' }}>
-                            <label className="checkbox-label">
-                                <input
-                                    type="checkbox"
-                                    checked={autoPlay}
-                                    onChange={(e) => setAutoPlay(e.target.checked)}
-                                />
-                                Auto-play next
-                            </label>
+                            {/* Translation Selection */}
+                            <div style={{ flex: '1', minWidth: '200px' }}>
+                                <label className="form-label">Translation</label>
+                                <select
+                                    className="form-select"
+                                    value={selectedTranslation}
+                                    onChange={(e) => setSelectedTranslation(e.target.value)}
+                                >
+                                    <option value="none">No Translation</option>
+                                    {textEditions
+                                        .filter(e => e.type === 'translation')
+                                        .map(edition => (
+                                            <option key={edition.identifier} value={edition.identifier}>
+                                                {edition.english_name}
+                                            </option>
+                                        ))}
+                                </select>
+                            </div>
+
+                            {/* Auto-play Toggle */}
+                            <div className="align-center d-flex" style={{ paddingTop: '24px' }}>
+                                <label className="checkbox-label">
+                                    <input
+                                        type="checkbox"
+                                        checked={autoPlay}
+                                        onChange={(e) => setAutoPlay(e.target.checked)}
+                                    />
+                                    Auto-play next
+                                </label>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
             )}
 
             {/* Surah Progress Card (for all users) */}
@@ -942,12 +990,13 @@ function SurahDetail() {
                         const isBookmarked = !!bookmarks[ayah.id];
                         const isLoadingBookmark = bookmarkLoading[ayah.id];
                         const isCompleted = completedAyahs.includes(ayah.number_in_surah);
+                        const isHighlighted = highlightedAyah === index;
 
                         return (
                             <div
                                 key={ayah.id}
                                 ref={(el) => ayahRefs.current[index] = el}
-                                className={`ayah-card ${isPlaying ? 'playing' : ''} ${isCompleted ? 'completed' : ''}`}
+                                className={`ayah-card ${isPlaying ? 'playing' : ''} ${isCompleted ? 'completed' : ''} ${isHighlighted ? 'highlighted' : ''}`}
                             >
                                 <div className="ayah-header">
                                     <span className={`ayah-number-badge ${isCompleted ? 'completed' : ''}`}>

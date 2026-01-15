@@ -1425,6 +1425,31 @@ code {
     vertical-align: middle;
 }
 
+/* Highlighted Ayah Card (Deep Link Target) */
+.ayah-card.highlighted {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.3), 0 12px 30px -10px rgba(249, 115, 22, 0.3);
+    animation: highlight-pulse 3s ease-out forwards;
+}
+
+.ayah-card.highlighted::before {
+    opacity: 1;
+}
+
+@keyframes highlight-pulse {
+    0% {
+        box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.5), 0 12px 30px -10px rgba(249, 115, 22, 0.4);
+    }
+
+    50% {
+        box-shadow: 0 0 0 6px rgba(249, 115, 22, 0.3), 0 12px 30px -10px rgba(249, 115, 22, 0.3);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0px rgba(249, 115, 22, 0), 0 8px 20px -10px rgba(249, 115, 22, 0.2);
+    }
+}
+
 /* =============================================================================
    FLOATING PROGRESS INDICATOR
    ============================================================================= */
