@@ -88,6 +88,7 @@ function SurahDetail() {
     const [autoPlay, setAutoPlay] = useState(false);
     const [loopAyah, setLoopAyah] = useState(false);
     const [showSurahCompletion, setShowSurahCompletion] = useState(false);
+    const [showOptions, setShowOptions] = useState(false);
 
     // Bookmark state - map of ayah_id -> bookmark_id (or null if not bookmarked)
     const [bookmarks, setBookmarks] = useState({});
@@ -540,7 +541,7 @@ function SurahDetail() {
                 </div>
                 <div className="page-header-actions">
                     {!autoPlay ? (
-                        <Button variant="success" onClick={playAll}>
+                        <Button variant="success" onClick={() => { setShowOptions(!showOptions); }}>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <polygon points="5 3 19 12 5 21 5 3"></polygon>
                             </svg>
@@ -555,10 +556,21 @@ function SurahDetail() {
                             Stop
                         </Button>
                     )}
+                    <button
+                        className="btn-icon"
+                        onClick={() => setShowOptions(!showOptions)}
+                        title={showOptions ? 'Hide options' : 'Show options'}
+                        style={{ marginLeft: '8px' }}
+                    >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points={`6 9 ${showOptions ? 12 : 6} 15 18 9`} />
+                        </svg>
+                    </button>
                 </div>
             </div>
 
-            {/* Edition Controls */}
+            {/* Edition Controls - Hidden by default, toggle with Play All button */}
+            {showOptions && (
             <div className="card mb-4">
                 <div className="card-body">
                     <div className="d-flex flex-wrap gap-3">
@@ -649,6 +661,7 @@ function SurahDetail() {
                     </div>
                 </div>
             </div>
+            )}
 
             {/* Surah Progress Card (for all users) */}
             <div className="card mb-4" ref={progressCardRef}>

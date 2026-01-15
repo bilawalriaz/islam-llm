@@ -37,21 +37,21 @@ NATURE_QUERIES = [
     'nature', 'mountain', 'stars', 'galaxy', 'ocean', 'forest', 'desert', 'night'
 ]
 
-# Card dimensions (content area) - ULTRA HIGH RES for sharp text
-CARD_WIDTH = 2400
-CARD_HEIGHT = 1350
-SQUARE_CARD_SIZE = 2160
-PORTRAIT_WIDTH = 1620  # 9:16 for mobile stories
-PORTRAIT_HEIGHT = 2880
+# Card dimensions - Balanced for speed and quality
+CARD_WIDTH = 1600
+CARD_HEIGHT = 900
+SQUARE_CARD_SIZE = 1440
+PORTRAIT_WIDTH = 1080  # 9:16 for mobile stories
+PORTRAIT_HEIGHT = 1920
 
-# Shadow and padding settings - scaled for higher resolution
+# Shadow and padding settings - scaled for resolution
 # macOS-style: softer, more diffuse, lower opacity
-SHADOW_EXPAND = 200
-SHADOW_BLUR = 100
+SHADOW_EXPAND = 100
+SHADOW_BLUR = 50
 SHADOW_OPACITY = 40  # Lower opacity for softer look
-SHADOW_OFFSET_Y = 20  # Minimal offset
+SHADOW_OFFSET_Y = 10  # Minimal offset
 SHADOW_OFFSET_X = 0
-CORNER_RADIUS = 72
+CORNER_RADIUS = 48
 
 
 def hex_to_rgb(hex_color):
@@ -156,137 +156,40 @@ def create_shadow(width, height, radius=20, blur=30, opacity=100, offset_x=0, of
 
 
 def get_unsplash_image(width, height, query="nature"):
-    """Fetch a random image from Unsplash with caching."""
-    # Cache directory
+    """Fetch a random image from cache ONLY - no downloading."""
     cache_dir = Path(__file__).parent / 'bg_cache'
-    cache_dir.mkdir(exist_ok=True)
 
-    # Curated list of 50 high-quality nature images
-    nature_images = _NATURE_IMAGES
+    # Get all cached images
+    cached_images = list(cache_dir.glob("*.png")) if cache_dir.exists() else []
 
-    img_url = random.choice(nature_images)
-    # Extract image ID from URL for caching (photo-{id})
-    img_id = img_url.split('/')[-1].split('?')[0]
-    cache_path = cache_dir / f"{img_id}.png"
+    if not cached_images:
+        # Fallback: Create a nice dark gradient if no cache
+        fallback = Image.new('RGBA', (width, height), (15, 23, 42, 255))
+        draw = ImageDraw.Draw(fallback)
+        for y in range(height):
+            r, g, b = 15, 23, 42
+            alpha = int(255 * (1 - y/height * 0.5))
+            draw.line([(0, y), (width, y)], fill=(r, g, b, alpha))
+        return fallback
 
-    # Check cache first (fast path - no network)
-    if cache_path.exists():
-        try:
-            return Image.open(cache_path).convert('RGBA').resize((width, height), Image.LANCZOS)
-        except:
-            pass
-
-    # Fetch and cache (only if not cached)
+    # Pick random cached image
+    cache_path = random.choice(cached_images)
     try:
-        response = requests.get(img_url, timeout=15)
-        if response.status_code == 200:
-            img = Image.open(BytesIO(response.content)).convert('RGBA')
-            # Save to cache at full resolution
-            img.save(cache_path, 'PNG', optimize=True)
-            return img.resize((width, height), Image.LANCZOS)
-    except Exception as e:
-        print(f"Error fetching Unsplash image: {e}")
-
-    # Fallback: Create a nice dark gradient
-    fallback = Image.new('RGBA', (width, height), (15, 23, 42, 255))
-    draw = ImageDraw.Draw(fallback)
-    for y in range(height):
-        r, g, b = 15, 23, 42
-        alpha = int(255 * (1 - y/height * 0.5))
-        draw.line([(0, y), (width, y)], fill=(r, g, b, alpha))
-    return fallback
-
-
-_NATURE_IMAGES = [
-    # Mountains & peaks
-    "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1454496522488-7a8e488e8606?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1486870591958-9b9d0d1dda99?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1511593358241-7eea1f3c84e5?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1458668383970-8ddd3927deed?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&w=2400&q=85",
-
-    # Forests & trees
-    "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1425913397330-cf8af2ff40a1?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1542273917363-3b1817f69a2d?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1473448912268-2022ce9509d8?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?auto=format&fit=crop&w=2400&q=85",
-
-    # Landscapes & valleys
-    "https://images.unsplash.com/photo-1506744038d36-0831d10ca9ce?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1434725039720-abb26e22ebe8?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1505765050516-f72dcac9c60e?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=2400&q=85",
-
-    # Sky & clouds
-    "https://images.unsplash.com/photo-1534088568595-a066f410bcda?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1507400492013-162706c8c05e?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1496568816309-51d7c20e3b21?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1504608524841-42fe6f032b4b?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1518837695005-2083093ee35b?auto=format&fit=crop&w=2400&q=85",
-
-    # Sunsets & golden hour
-    "https://images.unsplash.com/photo-1532274402911-5a33904d2824?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1495616811223-4d98c6e9c869?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1495567720989-cebdbdd97913?auto=format&fit=crop&w=2400&q=85",
-
-    # Ocean & water
-    "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1468413253725-0d5181091126?auto=format&fit=crop&w=2400&q=85",
-
-    # Desert & sand
-    "https://images.unsplash.com/photo-1509316785289-025f5b846b35?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1473580044384-7ba9967e16a0?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1542401886-65d6c61db217?auto=format&fit=crop&w=2400&q=85",
-
-    # Night & stars
-    "https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1462331940025-496dfbfc7564?auto=format&fit=crop&w=2400&q=85",
-    "https://images.unsplash.com/photo-1507400492013-162706c8c05e?auto=format&fit=crop&w=2400&q=85",
-]
-
-
-def preload_backgrounds():
-    """Pre-warm the background cache by downloading all images.
-    Call this on app startup to ensure fast first generation.
-    Runs in background, non-blocking.
-    """
-    import threading
-
-    def _preload():
-        cache_dir = Path(__file__).parent / 'bg_cache'
-        cache_dir.mkdir(exist_ok=True)
-
-        for img_url in _NATURE_IMAGES:
-            img_id = img_url.split('/')[-1].split('?')[0]
-            cache_path = cache_dir / f"{img_id}.png"
-
-            if cache_path.exists():
-                continue  # Already cached
-
-            try:
-                response = requests.get(img_url, timeout=15)
-                if response.status_code == 200:
-                    img = Image.open(BytesIO(response.content)).convert('RGBA')
-                    img.save(cache_path, 'PNG', optimize=True)
-                    print(f"Cached: {img_id}")
-            except Exception as e:
-                print(f"Failed to cache {img_id}: {e}")
-
-    # Run in background thread
-    thread = threading.Thread(target=_preload, daemon=True)
-    thread.start()
+        return Image.open(cache_path).convert('RGBA').resize((width, height), Image.LANCZOS)
+    except:
+        # If corrupted, try another
+        cached_images.remove(cache_path)
+        if cached_images:
+            cache_path = random.choice(cached_images)
+            return Image.open(cache_path).convert('RGBA').resize((width, height), Image.LANCZOS)
+        # Fallback
+        fallback = Image.new('RGBA', (width, height), (15, 23, 42, 255))
+        draw = ImageDraw.Draw(fallback)
+        for y in range(height):
+            r, g, b = 15, 23, 42
+            alpha = int(255 * (1 - y/height * 0.5))
+            draw.line([(0, y), (width, y)], fill=(r, g, b, alpha))
+        return fallback
 
 
 def wrap_arabic_text(text, font, max_width, draw):
@@ -448,12 +351,12 @@ def generate_ayah_image(
         panel_bg = bg.crop((panel_rect[0], panel_rect[1], panel_rect[2], panel_rect[3]))
         panel_w, panel_h = panel_bg.size
 
-        # Downsample to 1/4 size for faster blur
-        small_size = (panel_w // 4, panel_h // 4)
+        # Downsample to 1/6 size for faster blur
+        small_size = (panel_w // 6, panel_h // 6)
         panel_small = panel_bg.resize(small_size, Image.LANCZOS)
 
         # Blur the small version (much faster!)
-        panel_blur_small = panel_small.filter(ImageFilter.GaussianBlur(radius=10))
+        panel_blur_small = panel_small.filter(ImageFilter.GaussianBlur(radius=5))
 
         # Upscale back to original size
         panel_blur = panel_blur_small.resize((panel_w, panel_h), Image.LANCZOS)
@@ -482,10 +385,10 @@ def generate_ayah_image(
         inner_rect = [panel_rect[0] + 3, panel_rect[1] + 3, panel_rect[2] - 3, panel_rect[3] - 3]
         card_draw.rounded_rectangle(inner_rect, radius=panel_radius - 2, outline=(255, 255, 255, 25), width=1)
 
-    # Content margins - scaled for higher resolution
-    margin_x = 120
-    margin_top = 90
-    margin_bottom = 120
+    # Content margins - scaled for resolution
+    margin_x = 80
+    margin_top = 60
+    margin_bottom = 80
 
     content_width = card_width - 2 * margin_x
     current_y = margin_top
@@ -494,22 +397,22 @@ def generate_ayah_image(
     arabic_word_count = len(arabic_text.split())
     translation_word_count = len(translation_text.split()) if translation_text else 0
 
-    # Responsive font sizing - scaled 1.5x for higher resolution
+    # Responsive font sizing - scaled for resolution
     if arabic_word_count > 30 or translation_word_count > 60:
-        arabic_font_size = 84
-        translation_font_size = 48
+        arabic_font_size = 56
+        translation_font_size = 32
         scale = 0.8
     elif arabic_word_count > 20 or translation_word_count > 40:
-        arabic_font_size = 96
-        translation_font_size = 57
+        arabic_font_size = 64
+        translation_font_size = 38
         scale = 0.9
     else:
-        arabic_font_size = 108
-        translation_font_size = 66
+        arabic_font_size = 72
+        translation_font_size = 44
         scale = 1.0
 
     # Draw badge with surah name
-    badge_font = get_font(int(42 * scale))
+    badge_font = get_font(int(28 * scale))
     
     # Construct refined badge text
     name_part = surah_english_name or (f"Surah {surah_number}")
@@ -527,8 +430,8 @@ def generate_ayah_image(
     badge_height = badge_bbox[3] - badge_bbox[1]
     badge_x = (card_width - badge_width) // 2
 
-    badge_padding_x = 42
-    badge_padding_y = 18
+    badge_padding_x = 28
+    badge_padding_y = 12
     pill_height = badge_height + badge_padding_y * 2
     
     card_draw.rounded_rectangle(
@@ -627,9 +530,9 @@ def generate_ayah_image(
             )
             current_y += translation_line_height
 
-    # Draw footer branding - scaled for higher resolution
-    footer_y = card_height - 75
-    footer_font = get_font(30)
+    # Draw footer branding
+    footer_y = card_height - 50
+    footer_font = get_font(20)
     
     footer_text = "Quran Reader  •  islam-llm.app"
     footer_bbox = card_draw.textbbox((0, 0), footer_text, font=footer_font)
