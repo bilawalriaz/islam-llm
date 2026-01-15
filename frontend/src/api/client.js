@@ -85,7 +85,14 @@ export async function register(data) {
     }
 
     const result = await response.json();
-    // Registration doesn't return session token, user must login
+
+    // Supabase auth may return session data on registration
+    // Store session token if available
+    const token = result.session?.access_token || result.session_token || result.access_token;
+    if (token) {
+        setSessionToken(token);
+    }
+
     return result;
 }
 
@@ -108,9 +115,12 @@ export async function login(email, password) {
 
     const result = await response.json();
 
-    // Store session token
-    if (result.session_token) {
-        setSessionToken(result.session_token);
+    // Store session token from Supabase auth response
+    // New format: { user: {...}, session: { access_token: ..., refresh_token: ... } }
+    // Old format: { user: {...}, session_token: ... }
+    const token = result.session?.access_token || result.session_token || result.access_token;
+    if (token) {
+        setSessionToken(token);
     }
 
     return result;
