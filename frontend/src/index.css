@@ -1416,10 +1416,9 @@ code {
 
 /* Surah Back Link - positioned at top left */
 .surah-back-link {
-    position: absolute;
-    top: -4px;
-    left: 0;
-    z-index: 10;
+    /* Removed absolute position to prevent overlap */
+    display: inline-flex;
+    margin-bottom: 24px;
 }
 
 /* Surah Title Container - for centering on mobile */

@@ -835,6 +835,15 @@ function SurahDetail() {
                         <span className={`status-badge ${surah.revelation_type?.toLowerCase() === 'meccan' ? 'primary' : 'success'}`}>
                             {surah.revelation_type}
                         </span>
+                        {/* Completion Indicator */}
+                        {completionStats && completionStats.completion_percentage === 100 && (
+                            <span className="status-badge success" style={{ background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '4px' }}>
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"></path>
+                                </svg>
+                                Completed
+                            </span>
+                        )}
                     </div>
                 </div>
                 <div className="page-header-actions">
