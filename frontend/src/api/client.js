@@ -370,6 +370,21 @@ export async function markAyahCompleted(ayahId, surahId, ayahNumber) {
 }
 
 /**
+ * Mark multiple ayahs as completed in a batch
+ * @param {Array<{ayah_id, surah_id, ayah_number}>} ayahsList 
+ */
+export async function markAyahsBatchCompleted(ayahsList) {
+    if (!ayahsList || ayahsList.length === 0) return { success: true, count: 0 };
+
+    return fetchAPI('/completed-ayahs/batch', {
+        method: 'POST',
+        body: JSON.stringify({
+            ayahs: ayahsList
+        }),
+    });
+}
+
+/**
  * Get completed ayahs for a specific surah
  */
 export async function getCompletedAyahsForSurah(surahId) {

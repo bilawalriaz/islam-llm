@@ -1455,6 +1455,53 @@ async def mark_ayah_completed(
     return {"success": True}
 
 
+class BatchCompletionItem(BaseModel):
+    ayah_id: int
+    surah_id: int
+    ayah_number: int
+
+
+class BatchCompletionRequest(BaseModel):
+    ayahs: List[BatchCompletionItem]
+
+
+@app.post("/api/completed-ayahs/batch")
+async def mark_ayahs_batch_completed(
+    data: BatchCompletionRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Mark multiple ayahs as completed in a single batch."""
+    if not data.ayahs:
+        return {"success": True, "count": 0}
+
+    client = supabase_admin or supabase
+    
+    # Prepare data for bulk insert
+    insert_data = []
+    for item in data.ayahs:
+        insert_data.append({
+            "user_id": current_user["id"],
+            "ayah_id": item.ayah_id,
+            "surah_id": item.surah_id,
+            "ayah_number": item.ayah_number
+        })
+    
+    try:
+        # Perform bulk insert/upsert
+        # ignore_duplicates=True ensures we don't fail if some are already marked
+        client.table("completed_ayahs").upsert(
+            insert_data, 
+            on_conflict="user_id, ayah_id",
+            ignore_duplicates=True
+        ).execute()
+        
+        return {"success": True, "count": len(insert_data)}
+    except Exception as e:
+        print(f"Batch completion error: {e}")
+        # Just return success false rather than 500 to prevent frontend crash loops
+        return {"success": False, "error": str(e)}
+
+
 @app.get("/api/completed-ayahs/surah/{surah_id}")
 async def get_completed_ayahs_for_surah(
     surah_id: int,

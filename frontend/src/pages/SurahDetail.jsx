@@ -5,7 +5,7 @@ import {
     checkBookmark, toggleBookmark, updateProgress, getBookmarksForSurah,
     getCompletedAyahsForSurah, getSurahCompletionStats, markAyahCompleted,
     startPlaySession, endPlaySession, startQuranPlay, getNextQuranAyah, endQuranPlay,
-    validateSequentialProgress, clearSurahProgress
+    validateSequentialProgress, clearSurahProgress, markAyahsBatchCompleted
 } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { LoadingState, EmptyState } from '../components/Spinner';
@@ -305,6 +305,38 @@ function SurahDetail() {
                             readingProgressSaveTimeoutRef.current = setTimeout(() => {
                                 // Only save if still strictly tracking and not playing
                                 if (audioRef.current && !audioRef.current.paused) return;
+
+                                // Backfill Logic: Find unread ayahs up to this point
+                                const batchItems = [];
+                                const newCompletedNumbers = [];
+
+                                // Check ayahs up to current index
+                                for (let i = 0; i <= index; i++) {
+                                    const a = ayahs[i];
+                                    if (!completedAyahs.includes(a.number_in_surah)) {
+                                        batchItems.push({
+                                            ayah_id: a.id,
+                                            surah_id: parseInt(id),
+                                            ayah_number: a.number_in_surah
+                                        });
+                                        newCompletedNumbers.push(a.number_in_surah);
+                                    }
+                                }
+
+                                if (batchItems.length > 0) {
+                                    // Optimistic update
+                                    setCompletedAyahs(prev => {
+                                        const unique = new Set([...prev, ...newCompletedNumbers]);
+                                        return Array.from(unique);
+                                    });
+
+                                    // Call batch API
+                                    markAyahsBatchCompleted(batchItems).then(() => {
+                                        validateSequentialProgress();
+                                    });
+                                }
+
+                                // Always update last read position
                                 saveProgress(parseInt(id), ayahs[index].id, ayahs[index].number_in_surah);
                             }, 2000); // 2 second dwell time
                         }
@@ -988,6 +1020,23 @@ function SurahDetail() {
                             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                         </svg>
                     </button>
+
+                    {/* Reading Progress Tracking Toggle - Visible in header */}
+                    <div style={{ marginLeft: '16px', display: 'flex', alignItems: 'center' }}>
+                        <label className="checkbox-label" style={{ marginBottom: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }} title="Automatically save your reading progress as you scroll">
+                            <input
+                                type="checkbox"
+                                checked={trackReadingProgress}
+                                onChange={(e) => {
+                                    const newValue = e.target.checked;
+                                    setTrackReadingProgress(newValue);
+                                    localStorage.setItem('trackReadingProgress', newValue);
+                                }}
+                                style={{ marginRight: '6px' }}
+                            />
+                            Track Reading
+                        </label>
+                    </div>
                 </div>
             </div>
 
@@ -1082,21 +1131,7 @@ function SurahDetail() {
                                     </label>
                                 </div>
 
-                                {/* Reading Progress Tracking Toggle */}
-                                <div className="align-center d-flex" style={{ paddingTop: '24px' }}>
-                                    <label className="checkbox-label" title="Automatically save your reading progress as you scroll">
-                                        <input
-                                            type="checkbox"
-                                            checked={trackReadingProgress}
-                                            onChange={(e) => {
-                                                const newValue = e.target.checked;
-                                                setTrackReadingProgress(newValue);
-                                                localStorage.setItem('trackReadingProgress', newValue);
-                                            }}
-                                        />
-                                        Track reading progress
-                                    </label>
-                                </div>
+
                             </div>
                         </div>
                     </div>
