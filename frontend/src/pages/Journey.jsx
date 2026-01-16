@@ -271,13 +271,7 @@ function Journey() {
                                                 </p>
                                             )}
                                             {bookmark.ayah_english && (
-                                                <p className="ayah-english-snippet" style={{
-                                                    fontSize: '0.875rem',
-                                                    color: 'var(--text-secondary)',
-                                                    marginTop: '8px',
-                                                    lineHeight: '1.6',
-                                                    fontStyle: 'italic'
-                                                }}>
+                                                <p className="ayah-english-snippet">
                                                     {bookmark.ayah_english}
                                                 </p>
                                             )}

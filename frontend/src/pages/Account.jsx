@@ -204,6 +204,11 @@ function Account() {
                                                         {bookmark.ayah_text}
                                                     </p>
                                                 )}
+                                                {bookmark.ayah_english && (
+                                                    <p className="ayah-english-snippet">
+                                                        {bookmark.ayah_english}
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                         <button
