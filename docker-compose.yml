@@ -1,0 +1,18 @@
+services:
+  backend:
+    build: ./backend
+    container_name: quran-backend
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./backend/.env
+    restart: always
+
+  frontend:
+    build: ./frontend
+    container_name: quran-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: always
