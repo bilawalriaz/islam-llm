@@ -895,8 +895,8 @@ function SurahDetail() {
             <div
                 className="reading-progress-bar"
                 style={{
-                    width: `${scrollProgress}%`,
-                    opacity: scrollProgress > 1 ? 1 : 0
+                    transform: `scaleX(${scrollProgress / 100})`,
+                    opacity: scrollProgress > 0 ? 1 : 0
                 }}
             />
 
