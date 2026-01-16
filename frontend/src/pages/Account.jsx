@@ -147,8 +147,8 @@ function Account() {
             </div>
 
             <div className="account-actions">
-                <Link to="/progress" className="btn btn-primary">
-                    View Detailed Progress
+                <Link to="/journey" className="btn btn-primary">
+                    View Detailed Journey
                 </Link>
             </div>
 

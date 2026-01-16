@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { searchQuran, getSurahs } from '../api/client';
 import { LoadingState, EmptyState } from '../components/Spinner';
+import TextHighlighter from '../components/TextHighlighter';
 
 /**
  * SearchPage - Full-text search across Quran ayahs
@@ -173,7 +174,8 @@ function SearchPage() {
 
     // Handle result click - navigate to surah with ayah anchor
     const handleResultClick = (surahId, ayahNumber) => {
-        navigate(`/quran/${surahId}#ayah-${ayahNumber}`);
+        const highlightParam = debouncedQuery ? `?highlight=${encodeURIComponent(debouncedQuery)}` : '';
+        navigate(`/quran/${surahId}${highlightParam}#ayah-${ayahNumber}`);
     };
 
     // Handle filter changes
@@ -304,7 +306,7 @@ function SearchPage() {
                                 <div className="search-result-header">
                                     <div className="search-result-reference">
                                         <span className="search-result-surah">
-                                            {result.surah_english_name || result.surah_name} ({result.surah_id})
+                                            <TextHighlighter text={result.surah_english_name || result.surah_name} highlight={debouncedQuery} /> ({result.surah_id})
                                         </span>
                                         <span className="search-result-ayah">
                                             Ayah {result.number_in_surah}
@@ -322,7 +324,7 @@ function SearchPage() {
 
                                 {/* Result Text */}
                                 <div className={`search-result-text ${result.language === 'ar' ? 'arabic-text' : 'english-text'}`}>
-                                    {result.text}
+                                    <TextHighlighter text={result.text} highlight={debouncedQuery} />
                                 </div>
                             </div>
                         </div>

@@ -5,10 +5,10 @@ import { getBookmarks, getProgressStats, getLastPosition, getAllSurahsProgress, 
 import { LoadingState } from '../components/Spinner';
 
 /**
- * Progress - Detailed Quran reading progress tracking
+ * Journey - Detailed Quran reading progress tracking
  * Shows overview of all surahs with drill-down capability
  */
-function Progress() {
+function Journey() {
     const [stats, setStats] = useState({
         total_ayahs_read: 0,
         total_surahs_read: 0,
@@ -112,7 +112,7 @@ function Progress() {
         <div className="progress-page">
             <div className="page-header">
                 <div>
-                    <h1 className="page-title">Reading Progress</h1>
+                    <h1 className="page-title">Your Journey</h1>
                     <p className="page-subtitle">Track your journey through the Quran</p>
                 </div>
                 <div className="page-header-actions">
@@ -318,4 +318,4 @@ function Progress() {
     );
 }
 
-export default Progress;
+export default Journey;

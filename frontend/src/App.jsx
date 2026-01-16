@@ -8,7 +8,7 @@ import ResetPassword from './pages/ResetPassword'
 import AuthCallback from './pages/AuthCallback'
 import Home from './pages/Home'
 import Account from './pages/Account'
-import Progress from './pages/Progress'
+import Journey from './pages/Journey'
 import Analytics from './pages/Analytics'
 import QuranHome from './pages/QuranHome'
 import SurahDetail from './pages/SurahDetail'
@@ -127,16 +127,16 @@ function AppRoutes() {
                 {/* Add more protected account routes here (progress, bookmarks, etc.) */}
             </Route>
 
-            {/* Progress page - protected route */}
+            {/* Journey page - protected route */}
             <Route
-                path="/progress"
+                path="/journey"
                 element={
                     <ProtectedRoute>
                         <Layout />
                     </ProtectedRoute>
                 }
             >
-                <Route index element={<Progress />} />
+                <Route index element={<Journey />} />
             </Route>
 
             {/* Analytics page - protected route */}

@@ -1554,6 +1554,15 @@ code {
     box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.1), var(--shadow-glow-accent);
 }
 
+/* Completion Animation State */
+.ayah-card.completed {
+    transition: background 1s ease, border-color 1s ease;
+}
+
+.ayah-number-badge {
+    transition: background 1s ease, box-shadow 1s ease, color 1s ease;
+}
+
 .ayah-number-badge.completed {
     background: linear-gradient(135deg, #10b981 0%, #059669 100%);
     color: white;
@@ -3100,4 +3109,20 @@ code {
     .search-result-text.arabic-text {
         font-size: 1.25rem;
     }
+}
+
+/* Text Highlighting */
+.highlight {
+    background-color: rgba(249, 115, 22, 0.25);
+    color: inherit;
+    border-radius: 4px;
+    padding: 0 2px;
+    box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.1);
+}
+
+.ayah-text-arabic .highlight {
+    background-color: rgba(249, 115, 22, 0.2);
+    border-radius: 8px;
+    padding: 2px 4px;
+    /* Adjust for Arabic line height quirks if needed */
 }

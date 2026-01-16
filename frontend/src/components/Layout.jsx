@@ -89,8 +89,8 @@ function Layout() {
                                 </NavLink>
                                 {isAuthenticated && (
                                     <>
-                                        <NavLink to="/account" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={closeMobileMenu}>
-                                            Progress
+                                        <NavLink to="/journey" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={closeMobileMenu}>
+                                            Journey
                                         </NavLink>
                                         <NavLink to="/share/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={closeMobileMenu}>
                                             Share

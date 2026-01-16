@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import {
     getSurah, getAyahs, getAudioEditions, getEditions,
     checkBookmark, toggleBookmark, updateProgress, getBookmarksForSurah,
@@ -13,6 +13,7 @@ import Button from '../components/Button';
 import ShareButton from '../components/ShareButton';
 import Modal from '../components/Modal';
 import { useMediaSession } from '../hooks/useMediaSession';
+import TextHighlighter from '../components/TextHighlighter';
 
 /**
  * Reciter name mapping - converts identifiers to human-readable names
@@ -95,6 +96,11 @@ function SurahDetail() {
     const [showOptions, setShowOptions] = useState(false);
     const [showClearProgressConfirm, setShowClearProgressConfirm] = useState(false);
     const [highlightedAyah, setHighlightedAyah] = useState(null);
+    const [searchParams] = useSearchParams();
+    const highlightQuery = searchParams.get('highlight');
+
+    // Track the last played/selected/navigated ayah for the UI indicator
+    const [lastPlayedIndex, setLastPlayedIndex] = useState(0);
 
     // Bookmark state - map of ayah_id -> bookmark_id (or null if not bookmarked)
     const [bookmarks, setBookmarks] = useState({});
@@ -195,6 +201,10 @@ function SurahDetail() {
 
             // Highlight the ayah
             setHighlightedAyah(targetIndex);
+
+            // Set as last played (selected) so player is ready
+            setLastPlayedIndex(targetIndex);
+            lastPlayingAyahRef.current = targetIndex;
 
             // Use requestAnimationFrame to ensure DOM is ready
             requestAnimationFrame(() => {
@@ -545,48 +555,61 @@ function SurahDetail() {
 
     const markAyahAsCompleted = async (ayah) => {
         if (!isAuthenticated) return;
+
+        // optimistic update
+        if (!completedAyahs.includes(ayah.number_in_surah)) {
+            setCompletedAyahs(prev => [...prev, ayah.number_in_surah]);
+
+            if (completionStats) {
+                // Simple optimistic stat update - doesn't handle "first unread" perfect recalculation
+                // but good enough for immediate feedback. detailed recalc happens on success or re-fetch.
+                setCompletionStats(prev => ({
+                    ...prev,
+                    completed_count: prev.completed_count + 1,
+                    completion_percentage: Math.round(((prev.completed_count + 1) / prev.total_ayahs) * 1000) / 10
+                }));
+            }
+        }
+
         try {
             await markAyahCompleted(ayah.id, parseInt(id), ayah.number_in_surah);
             // Validate and update sequential progress flags
             await validateSequentialProgress();
 
-            // Update local state
-            if (!completedAyahs.includes(ayah.number_in_surah)) {
-                // Calculate new completed list
-                const newCompleted = [...completedAyahs, ayah.number_in_surah];
-                setCompletedAyahs(prev => [...prev, ayah.number_in_surah]);
+            // We can re-fetch or rely on the optimistic update. 
+            // For "first unread" correctness, we might want to do the complex logic here
+            // or just let the background re-fetch happen if we trigger one.
+            // For now, let's just ensure the strict logic runs too to correct any specific edge cases
 
-                // Update completion stats
-                if (completionStats) {
-                    // Logic to find new first unread
-                    let firstUnread = completionStats.first_unread_ayah;
-
-                    // Only need to recalculate if we just completed the current "first unread"
-                    if (firstUnread === ayah.number_in_surah) {
-                        const completedSet = new Set(newCompleted);
-                        // Start checking from the current ayah onwards
-                        let found = false;
-                        for (let i = 0; i < completionStats.total_ayahs; i++) {
-                            const ayahNum = i + 1;
-                            if (!completedSet.has(ayahNum)) {
-                                firstUnread = ayahNum;
-                                found = true;
-                                break;
-                            }
+            // Logic to find new first unread (copied from original to ensure correctness eventually)
+            if (!completedAyahs.includes(ayah.number_in_surah)) { // check again in case race condition
+                // ... (state update logic is already done optimistically, maybe we skip or just re-verify)
+            }
+            // Recalculate strict "first unread" just in case
+            if (completionStats) {
+                let firstUnread = completionStats.first_unread_ayah;
+                if (firstUnread === ayah.number_in_surah) {
+                    const newCompletedList = [...completedAyahs, ayah.number_in_surah];
+                    const completedSet = new Set(newCompletedList);
+                    let found = false;
+                    for (let i = 0; i < completionStats.total_ayahs; i++) {
+                        const ayahNum = i + 1;
+                        if (!completedSet.has(ayahNum)) {
+                            firstUnread = ayahNum;
+                            found = true;
+                            break;
                         }
-                        if (!found) firstUnread = null; // All done
                     }
+                    if (!found) firstUnread = null;
 
-                    setCompletionStats(prev => ({
-                        ...prev,
-                        completed_count: prev.completed_count + 1,
-                        completion_percentage: Math.round(((prev.completed_count + 1) / prev.total_ayahs) * 1000) / 10,
-                        first_unread_ayah: firstUnread
-                    }));
+                    setCompletionStats(prev => ({ ...prev, first_unread_ayah: firstUnread }));
                 }
             }
+
         } catch (err) {
             console.error('Failed to mark ayah as completed:', err);
+            // Revert optimistic update on error
+            setCompletedAyahs(prev => prev.filter(n => n !== ayah.number_in_surah));
         }
     };
 
@@ -645,6 +668,7 @@ function SurahDetail() {
                 .then(async () => {
                     lastPlayingAyahRef.current = index;
                     setPlayingAyah(index);
+                    setLastPlayedIndex(index);
 
                     // Track play session for analytics
                     if (isAuthenticated) {
@@ -826,29 +850,29 @@ function SurahDetail() {
                                 const firstGap = findFirstGap();
                                 return firstGap !== null && firstGap > 1;
                             })() && (
-                                <Button
-                                    variant="secondary"
-                                    onClick={() => {
-                                        const firstGap = findFirstGap();
-                                        if (firstGap) {
-                                            const gapIndex = ayahs.findIndex(a => a.number_in_surah === firstGap);
-                                            if (gapIndex >= 0) {
-                                                setAutoPlay(true);
-                                                playAyah(gapIndex);
-                                                ayahRefs.current[gapIndex]?.scrollIntoView({
-                                                    behavior: 'smooth',
-                                                    block: 'center',
-                                                });
+                                    <Button
+                                        variant="secondary"
+                                        onClick={() => {
+                                            const firstGap = findFirstGap();
+                                            if (firstGap) {
+                                                const gapIndex = ayahs.findIndex(a => a.number_in_surah === firstGap);
+                                                if (gapIndex >= 0) {
+                                                    setAutoPlay(true);
+                                                    playAyah(gapIndex);
+                                                    ayahRefs.current[gapIndex]?.scrollIntoView({
+                                                        behavior: 'smooth',
+                                                        block: 'center',
+                                                    });
+                                                }
                                             }
-                                        }
-                                    }}
-                                >
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                                    </svg>
-                                    Catch up from Ayah {findFirstGap()}
-                                </Button>
-                            )}
+                                        }}
+                                    >
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                                        </svg>
+                                        Catch up from Ayah {findFirstGap()}
+                                    </Button>
+                                )}
                         </>
                     ) : (
                         <Button variant="danger" onClick={stopPlayback}>
@@ -992,28 +1016,28 @@ function SurahDetail() {
                                     const latestIndex = ayahs.findIndex(a => a.number_in_surah === latestNext);
                                     return latestIndex >= 0;
                                 })() && (
-                                    <Button
-                                        variant="primary"
-                                        size="small"
-                                        onClick={() => {
-                                            const latestNext = findLatestNext();
-                                            const latestIndex = ayahs.findIndex(a => a.number_in_surah === latestNext);
+                                        <Button
+                                            variant="primary"
+                                            size="small"
+                                            onClick={() => {
+                                                const latestNext = findLatestNext();
+                                                const latestIndex = ayahs.findIndex(a => a.number_in_surah === latestNext);
 
-                                            if (latestIndex >= 0) {
-                                                setAutoPlay(true);
-                                                playAyah(latestIndex);
+                                                if (latestIndex >= 0) {
+                                                    setAutoPlay(true);
+                                                    playAyah(latestIndex);
 
-                                                // Also scroll to it
-                                                ayahRefs.current[latestIndex]?.scrollIntoView({
-                                                    behavior: 'smooth',
-                                                    block: 'center',
-                                                });
-                                            }
-                                        }}
-                                    >
-                                        Resume from Latest (Ayah {findLatestNext()})
-                                    </Button>
-                                )}
+                                                    // Also scroll to it
+                                                    ayahRefs.current[latestIndex]?.scrollIntoView({
+                                                        behavior: 'smooth',
+                                                        block: 'center',
+                                                    });
+                                                }
+                                            }}
+                                        >
+                                            Resume from Latest (Ayah {findLatestNext()})
+                                        </Button>
+                                    )}
                                 {completionStats.completed_count > 0 && (
                                     <Button
                                         variant="secondary"
@@ -1188,14 +1212,14 @@ function SurahDetail() {
 
                                     {/* Arabic Text */}
                                     <div className="ayah-text-arabic">
-                                        {ayah.text}
+                                        <TextHighlighter text={ayah.text} highlight={highlightQuery} />
                                         <span className="ayah-symbol">&#65018;</span>
                                     </div>
 
                                     {/* Translation */}
                                     {translation && (
                                         <div className="ayah-translation">
-                                            {translation.text}
+                                            <TextHighlighter text={translation.text} highlight={highlightQuery} />
                                         </div>
                                     )}
 
@@ -1220,7 +1244,7 @@ function SurahDetail() {
                 <div className="floating-progress-content">
                     <div className="floating-progress-info">
                         <span className="floating-progress-label">
-                            Ayah {playingAyah !== null ? ayahs[playingAyah]?.number_in_surah : '-'} of {ayahs.length}
+                            Ayah {playingAyah !== null ? ayahs[playingAyah]?.number_in_surah : (ayahs[lastPlayedIndex]?.number_in_surah || '-')} of {ayahs.length}
                         </span>
                         {completionStats && (
                             <div className="floating-progress-bar">
@@ -1265,9 +1289,11 @@ function SurahDetail() {
                                     // Currently paused - resume from last playing ayah, or first unread, or beginning
                                     const resumeIndex = lastPlayingAyahRef.current !== null
                                         ? lastPlayingAyahRef.current
-                                        : completionStats?.first_unread_ayah
-                                            ? ayahs.findIndex(a => a.number_in_surah === completionStats.first_unread_ayah)
-                                            : 0;
+                                        : lastPlayedIndex !== null
+                                            ? lastPlayedIndex
+                                            : completionStats?.first_unread_ayah
+                                                ? ayahs.findIndex(a => a.number_in_surah === completionStats.first_unread_ayah)
+                                                : 0;
                                     setAutoPlay(true);
                                     playAyah(resumeIndex >= 0 ? resumeIndex : 0);
                                 }
