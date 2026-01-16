@@ -405,6 +405,16 @@ export async function getAllSurahsProgress() {
     return fetchAPI('/progress/all-surahs');
 }
 
+/**
+ * Clear all progress for a specific surah
+ * Deletes all completed ayahs for the given surah
+ */
+export async function clearSurahProgress(surahId) {
+    return fetchAPI(`/completed-ayahs/surah/${surahId}`, {
+        method: 'DELETE',
+    });
+}
+
 // =============================================================================
 // SEQUENTIAL PROGRESS API
 // =============================================================================

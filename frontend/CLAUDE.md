@@ -1,4 +1,4 @@
-# CLAUDE.md - React App Template
+# CLAUDE.md - Quran Reader
 
 **Owner:** Bilawal Riaz
 **Repository:** github.com/bilawalriaz/react-app-template

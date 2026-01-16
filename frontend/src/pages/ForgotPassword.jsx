@@ -36,8 +36,8 @@ function ForgotPassword() {
             <div className="auth-container">
                 <div className="auth-header">
                     <Link to="/" className="logo">
-                        <div className="logo-mark">RA</div>
-                        <span className="logo-text">React App</span>
+                        <div className="logo-mark">QR</div>
+                        <span className="logo-text">Quran Reader</span>
                     </Link>
                 </div>
 

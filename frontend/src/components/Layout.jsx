@@ -74,6 +74,13 @@ function Layout() {
                             </div>
 
                             <nav className={`nav-links ${mobileMenuOpen ? 'nav-links-open' : ''}`}>
+                                <NavLink to="/search" className={({ isActive }) => `nav-link nav-link-icon ${isActive ? 'active' : ''}`} onClick={closeMobileMenu} title="Search the Quran">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <circle cx="11" cy="11" r="8"></circle>
+                                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                    </svg>
+                                    <span className="nav-link-text">Search</span>
+                                </NavLink>
                                 <NavLink to="/quran" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={closeMobileMenu}>
                                     Quran
                                 </NavLink>
@@ -115,6 +122,12 @@ function Layout() {
                             </div>
 
                             <div className={`auth-links ${mobileMenuOpen ? 'auth-links-open' : ''}`}>
+                                <Link to="/search" className="nav-link-icon" onClick={closeMobileMenu} title="Search the Quran">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <circle cx="11" cy="11" r="8"></circle>
+                                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                    </svg>
+                                </Link>
                                 <Link to="/login" className="btn btn-secondary btn-small" onClick={closeMobileMenu}>
                                     Sign In
                                 </Link>

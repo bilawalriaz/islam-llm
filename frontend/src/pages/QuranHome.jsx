@@ -71,9 +71,33 @@ function QuranHome() {
     return (
         <>
             <div className="page-header">
-                <div>
-                    <h1 className="page-title">The Noble Quran</h1>
-                    <p className="page-subtitle">Read and listen to the Holy Quran with translations</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '1rem' }}>
+                    <div>
+                        <h1 className="page-title">The Noble Quran</h1>
+                        <p className="page-subtitle">Read and listen to the Holy Quran with translations</p>
+                    </div>
+                    <Link
+                        to="/search"
+                        className="btn-icon"
+                        title="Search the Quran"
+                        style={{
+                            padding: '0.5rem',
+                            borderRadius: '8px',
+                            border: '1px solid var(--border-color)',
+                            background: 'var(--bg-white)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            textDecoration: 'none',
+                            color: 'var(--text-primary)'
+                        }}
+                    >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                    </Link>
                 </div>
             </div>
 
@@ -105,7 +129,7 @@ function QuranHome() {
                             <input
                                 type="text"
                                 className="form-control"
-                                placeholder="Search by name, English name, or number..."
+                                placeholder="Search surahs by name, English name, or number..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />

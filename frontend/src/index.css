@@ -1,4 +1,4 @@
-/* React App Template - Design System */
+/* Quran Reader - Design System */
 
 :root {
     --font-main: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -74,6 +74,7 @@ body {
     gap: 14px;
     text-decoration: none;
     color: inherit;
+    white-space: nowrap;
 }
 
 .logo-mark {
@@ -125,6 +126,43 @@ body {
     border-color: transparent;
     box-shadow: 0 8px 20px -6px rgba(249, 115, 22, 0.4);
     transform: translateY(-2px);
+}
+
+/* Nav link icon (search) */
+.nav-link-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 16px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-radius: var(--radius-md);
+    transition: all 0.3s cubic-bezier(0.2, 0, 0, 1);
+    background: rgba(0, 0, 0, 0.03);
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.nav-link-icon:hover,
+.nav-link-icon.active {
+    color: var(--text-white);
+    background: var(--gradient-accent);
+    border-color: transparent;
+    box-shadow: 0 8px 20px -6px rgba(249, 115, 22, 0.4);
+    transform: translateY(-2px);
+}
+
+/* Hide text on nav-link-icon on desktop, show only icon */
+.nav-link-icon .nav-link-text {
+    display: none;
+}
+
+/* Auth links icon adjustment */
+.auth-links .nav-link-icon {
+    padding: 8px 12px;
 }
 
 .user-menu {
@@ -768,6 +806,7 @@ body {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 32px;
+    position: relative;
 }
 
 .page-header-actions {
@@ -966,12 +1005,14 @@ code {
     letter-spacing: -0.03em;
     margin-bottom: 8px;
     color: var(--text-primary);
+    text-align: center;
 }
 
 .auth-card>p {
     color: var(--text-secondary);
     font-size: 0.9375rem;
     margin-bottom: 32px;
+    text-align: center;
 }
 
 .auth-form {
@@ -1056,6 +1097,22 @@ code {
     text-decoration: underline;
 }
 
+.auth-card .auth-links {
+    display: block;
+    text-align: center;
+    font-size: 0.875rem;
+    margin-top: 1rem;
+}
+
+.auth-links a {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.auth-links a:hover {
+    color: var(--accent-color);
+}
+
 /* =============================================================================
    QURAN-SPECIFIC STYLES
    ============================================================================= */
@@ -1070,7 +1127,7 @@ code {
 }
 
 .surah-title-arabic {
-    font-size: 2.5rem;
+    font-size: 3rem;
     font-weight: 700;
     color: var(--accent-color);
     margin-left: 16px;
@@ -1360,6 +1417,51 @@ code {
     flex: 1;
 }
 
+/* Surah Back Link - positioned at top left */
+.surah-back-link {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 10;
+}
+
+/* Surah Title Container - for centering on mobile */
+.surah-title-container {
+    display: flex;
+    justify-content: flex-start;
+}
+
+/* Surah Meta Row - better spacing for subtitle elements */
+.surah-meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    margin-top: 8px;
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+}
+
+.surah-meta-row>*:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    right: -8px;
+    color: var(--text-muted);
+}
+
+.surah-english-name {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.surah-translation {
+    color: var(--text-secondary);
+}
+
+.surah-verses {
+    color: var(--text-muted);
+}
+
 /* Surah Navigation Footer */
 .surah-nav-footer {
     margin-top: 40px;
@@ -1511,20 +1613,19 @@ code {
     bottom: 24px;
     right: 24px;
     z-index: 100;
-    animation: slideInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     will-change: transform, opacity;
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+    pointer-events: none;
+    visibility: hidden;
 }
 
-@keyframes slideInUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+.floating-progress.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+    visibility: visible;
 }
 
 .floating-progress-content {
@@ -2209,6 +2310,16 @@ code {
         text-align: center;
     }
 
+    .nav-link-icon {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* Show "Search" text on mobile */
+    .nav-link-icon .nav-link-text {
+        display: inline;
+    }
+
     .user-menu {
         display: none;
         width: 100%;
@@ -2252,6 +2363,23 @@ code {
         flex-direction: column;
         align-items: flex-start;
         gap: 16px;
+    }
+
+    /* Center surah header info on mobile */
+    .surah-header-info {
+        width: 100%;
+        text-align: center;
+        align-self: center;
+    }
+
+    /* Center surah title container on mobile */
+    .surah-title-container {
+        justify-content: center;
+    }
+
+    /* Center surah meta row flex items on mobile */
+    .surah-meta-row {
+        justify-content: center;
     }
 
     .page-header-actions {
@@ -2364,7 +2492,7 @@ code {
     }
 
     .surah-title-arabic {
-        font-size: 1.75rem;
+        font-size: 2.25rem;
     }
 
     .ayah-text-arabic {
@@ -2870,5 +2998,120 @@ code {
     .progress-quick-actions .btn {
         width: 100%;
         justify-content: center;
+    }
+}
+
+/* =============================================================================
+   SEARCH RESULTS PAGE
+   ============================================================================= */
+
+.search-results {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.search-result-card {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.search-result-card:hover {
+    border-color: var(--accent-color);
+    box-shadow: var(--shadow-subtle), 0 0 0 3px rgba(249, 115, 22, 0.1);
+}
+
+.search-result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    gap: 12px;
+}
+
+.search-result-reference {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.search-result-surah {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.search-result-ayah {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.search-result-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.language-badge {
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.language-badge.arabic {
+    background: rgba(249, 115, 22, 0.1);
+    color: var(--accent-color);
+}
+
+.language-badge.english {
+    background: rgba(148, 163, 184, 0.15);
+    color: var(--text-secondary);
+}
+
+.edition-badge {
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+.search-result-text {
+    line-height: 1.8;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.02);
+    border-radius: var(--radius-sm);
+    border-left: 3px solid var(--accent-color);
+}
+
+.search-result-text.arabic-text {
+    font-family: var(--font-arabic);
+    font-size: 1.375rem;
+    text-align: right;
+    direction: rtl;
+    line-height: 2.2;
+}
+
+.search-result-text.english-text {
+    font-size: 1rem;
+    color: var(--text-secondary);
+}
+
+/* Mobile search results */
+@media (max-width: 768px) {
+    .search-result-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .search-result-text.arabic-text {
+        font-size: 1.25rem;
     }
 }

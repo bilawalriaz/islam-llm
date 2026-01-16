@@ -1619,6 +1619,17 @@ async def get_overall_completion_stats(current_user: dict = Depends(get_current_
     }
 
 
+@app.delete("/api/completed-ayahs/surah/{surah_id}")
+async def clear_surah_progress(
+    surah_id: int,
+    current_user: dict = Depends(get_current_user)
+):
+    """Clear all completed ayahs for a specific surah."""
+    client = supabase_admin or supabase
+    response = client.table("completed_ayahs").delete().eq("user_id", current_user["id"]).eq("surah_id", surah_id).execute()
+    return {"success": True, "deleted_count": len(response.data) if response.data else 0}
+
+
 # =============================================================================
 # SEQUENTIAL PROGRESS ENDPOINTS (Supabase + SQLite)
 # =============================================================================
