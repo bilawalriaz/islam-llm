@@ -934,143 +934,152 @@ function SurahDetail() {
 
             {/* Header with Surah Info */}
             <div className="page-header">
-                {/* Back to Surahs Link - positioned at top left */}
-                <Link to="/quran" className="btn btn-secondary btn-small surah-back-link">
-                    &larr; Back to Surahs
-                </Link>
-
-                <div className="surah-header-info">
-                    <div className="surah-title-container">
-                        <h1 className="page-title">
-                            <span className="surah-title-arabic">{surah.name}</span>
-                        </h1>
-                    </div>
-                    <div className="surah-meta-row">
-                        <span className="surah-english-name">{surah.english_name}</span>
-                        <span className="surah-translation">{surah.english_name_translation}</span>
-                        <span className="surah-verses">{surah.number_of_ayahs} verses</span>
-                        <span className={`status-badge ${surah.revelation_type?.toLowerCase() === 'meccan' ? 'primary' : 'success'}`}>
-                            {surah.revelation_type}
-                        </span>
-                        {/* Completion Indicator */}
-                        {completionStats && completionStats.completion_percentage === 100 && (
-                            <span className="status-badge success" style={{ background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }}>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '4px' }}>
-                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"></path>
-                                </svg>
-                                Completed
-                            </span>
-                        )}
-                    </div>
+                {/* Top: Large Arabic Title */}
+                <div className="surah-header-top">
+                    <h1 className="surah-title-arabic">
+                        {surah.name}
+                    </h1>
                 </div>
-                <div className="page-header-actions">
-                    <div className="split-btn-group">
-                        {!autoPlay ? (
-                            <Button variant="success" onClick={playAll} className="split-btn-main">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                                </svg>
-                                Play Surah
-                            </Button>
-                        ) : (
-                            <Button variant="danger" onClick={stopPlayback} className="split-btn-main">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                    <rect x="6" y="4" width="4" height="16"></rect>
-                                    <rect x="14" y="4" width="4" height="16"></rect>
-                                </svg>
-                                Stop
-                            </Button>
-                        )}
-                        <button
-                            className={`split-btn-arrow ${showOptions ? 'active' : ''}`}
-                            onClick={() => setShowOptions(!showOptions)}
-                            title={showOptions ? 'Hide options' : 'Show options'}
-                        >
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                <circle cx="12" cy="12" r="3"></circle>
-                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                            </svg>
-                        </button>
 
-                        {showOptions && (
-                            <div className="settings-dropdown">
-                                <div className="settings-dropdown-header">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                {/* Bottom: 3-Column Layout (Back | Metadata | Actions) */}
+                <div className="surah-header-bottom">
+                    <div className="surah-header-left">
+                        <Link to="/quran" className="btn btn-secondary btn-small surah-back-link">
+                            &larr; Back to Surahs
+                        </Link>
+                    </div>
+
+                    <div className="surah-header-center">
+                        <div className="surah-meta-row">
+                            <span className="surah-english-name">{surah.english_name}</span>
+                            <span className="surah-translation">{surah.english_name_translation}</span>
+                            <span className="surah-verses">{surah.number_of_ayahs} verses</span>
+                            <span className={`status-badge ${surah.revelation_type?.toLowerCase() === 'meccan' ? 'primary' : 'success'}`}>
+                                {surah.revelation_type}
+                            </span>
+                            {/* Completion Indicator */}
+                            {completionStats && completionStats.completion_percentage === 100 && (
+                                <span className="status-badge success" style={{ background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }}>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '4px' }}>
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"></path>
+                                    </svg>
+                                    Completed
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="surah-header-right">
+                        <div className="page-header-actions">
+                            <div className="split-btn-group">
+                                {!autoPlay ? (
+                                    <Button variant="success" onClick={playAll} className="split-btn-main">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                        </svg>
+                                        Play Surah
+                                    </Button>
+                                ) : (
+                                    <Button variant="danger" onClick={stopPlayback} className="split-btn-main">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                            <rect x="6" y="4" width="4" height="16"></rect>
+                                            <rect x="14" y="4" width="4" height="16"></rect>
+                                        </svg>
+                                        Stop
+                                    </Button>
+                                )}
+                                <button
+                                    className={`split-btn-arrow ${showOptions ? 'active' : ''}`}
+                                    onClick={() => setShowOptions(!showOptions)}
+                                    title={showOptions ? 'Hide options' : 'Show options'}
+                                >
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                         <circle cx="12" cy="12" r="3"></circle>
                                         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                                     </svg>
-                                    Settings
-                                </div>
-                                <div className="settings-group">
-                                    <label className="settings-label">Reciter</label>
-                                    <select
-                                        className="form-select"
-                                        value={selectedAudioEdition}
-                                        onChange={(e) => setSelectedAudioEdition(e.target.value)}
-                                    >
-                                        {simplifiedReciters.map(reciter => (
-                                            <option key={reciter.identifier} value={reciter.identifier}>
-                                                {reciter.name}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="settings-group">
-                                    <label className="settings-label">Translation</label>
-                                    <select
-                                        className="form-select"
-                                        value={selectedTextEdition}
-                                        onChange={(e) => handleTextEditionChange(e.target.value)}
-                                    >
-                                        <option value="quran-uthmani">Original Arabic</option>
-                                        <option value="en.sahih">English (Sahih International)</option>
-                                        <option value="en.pickthall">English (Pickthall)</option>
-                                        <option value="ur.jalandhry">Urdu (Jalandhry)</option>
-                                    </select>
-                                </div>
-                                <div className="settings-group">
-                                    <label className="checkbox-label" style={{ marginBottom: 0, fontSize: '0.875rem' }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={trackReadingProgress}
-                                            onChange={(e) => {
-                                                const newValue = e.target.checked;
-                                                setTrackReadingProgress(newValue);
-                                                localStorage.setItem('trackReadingProgress', newValue);
-                                            }}
-                                        />
-                                        Update progress on scroll
-                                    </label>
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                                </button>
 
-                    {!autoPlay && isAuthenticated && completedAyahs.length > 0 && (() => {
-                        const firstGap = findFirstGap();
-                        return firstGap !== null && firstGap > 1;
-                    })() && (
-                            <Button
-                                variant="secondary"
-                                className="catch-up-btn"
-                                onClick={() => {
-                                    const firstGap = findFirstGap();
-                                    if (firstGap) {
-                                        const gapIndex = ayahs.findIndex(a => a.number_in_surah === firstGap);
-                                        if (gapIndex >= 0) {
-                                            setAutoPlay(true);
-                                            playAyah(gapIndex);
-                                            ayahRefs.current[gapIndex]?.scrollIntoView({
-                                                behavior: 'smooth',
-                                                block: 'center',
-                                            });
-                                        }
-                                    }
-                                }}
-                            >
-                                Catch up from Ayah {findFirstGap()}
-                            </Button>
-                        )}
+                                {showOptions && (
+                                    <div className="settings-dropdown">
+                                        <div className="settings-dropdown-header">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <circle cx="12" cy="12" r="3"></circle>
+                                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                            </svg>
+                                            Settings
+                                        </div>
+                                        <div className="settings-group">
+                                            <label className="settings-label">Reciter</label>
+                                            <select
+                                                className="form-select"
+                                                value={selectedAudioEdition}
+                                                onChange={(e) => setSelectedAudioEdition(e.target.value)}
+                                            >
+                                                {simplifiedReciters.map(reciter => (
+                                                    <option key={reciter.identifier} value={reciter.identifier}>
+                                                        {reciter.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="settings-group">
+                                            <label className="settings-label">Translation</label>
+                                            <select
+                                                className="form-select"
+                                                value={selectedTextEdition}
+                                                onChange={(e) => handleTextEditionChange(e.target.value)}
+                                            >
+                                                <option value="quran-uthmani">Original Arabic</option>
+                                                <option value="en.sahih">English (Sahih International)</option>
+                                                <option value="en.pickthall">English (Pickthall)</option>
+                                                <option value="ur.jalandhry">Urdu (Jalandhry)</option>
+                                            </select>
+                                        </div>
+                                        <div className="settings-group">
+                                            <label className="checkbox-label" style={{ marginBottom: 0, fontSize: '0.875rem' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={trackReadingProgress}
+                                                    onChange={(e) => {
+                                                        const newValue = e.target.checked;
+                                                        setTrackReadingProgress(newValue);
+                                                        localStorage.setItem('trackReadingProgress', newValue);
+                                                    }}
+                                                />
+                                                Update progress on scroll
+                                            </label>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {!autoPlay && isAuthenticated && completedAyahs.length > 0 && (() => {
+                                const firstGap = findFirstGap();
+                                return firstGap !== null && firstGap > 1;
+                            })() && (
+                                    <Button
+                                        variant="secondary"
+                                        className="catch-up-btn"
+                                        onClick={() => {
+                                            const firstGap = findFirstGap();
+                                            if (firstGap) {
+                                                const gapIndex = ayahs.findIndex(a => a.number_in_surah === firstGap);
+                                                if (gapIndex >= 0) {
+                                                    setAutoPlay(true);
+                                                    playAyah(gapIndex);
+                                                    ayahRefs.current[gapIndex]?.scrollIntoView({
+                                                        behavior: 'smooth',
+                                                        block: 'center',
+                                                    });
+                                                }
+                                            }
+                                        }}
+                                    >
+                                        Catch up from Ayah {findFirstGap()}
+                                    </Button>
+                                )}
+                        </div>
+                    </div>
                 </div>
             </div>
 
