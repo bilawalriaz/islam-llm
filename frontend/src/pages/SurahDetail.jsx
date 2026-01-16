@@ -136,6 +136,14 @@ function SurahDetail() {
     const [showFloatingProgress, setShowFloatingProgress] = useState(false);
     const [volume, setVolume] = useState(1);
 
+    // Scroll Progress & Reading Tracking
+    const [scrollProgress, setScrollProgress] = useState(0);
+    const [readingAyah, setReadingAyah] = useState(null);
+    const [trackReadingProgress, setTrackReadingProgress] = useState(() => {
+        return localStorage.getItem('trackReadingProgress') === 'true';
+    });
+    const readingProgressSaveTimeoutRef = useRef(null);
+
     // Simplified reciter options (only Mishary Alafasy and Ibrahim Walk)
     const simplifiedReciters = [
         { identifier: 'ar.alafasy', name: 'Alafasy' },
@@ -238,17 +246,23 @@ function SurahDetail() {
     }, [ayahs, isAuthenticated]);
 
     // Detect when progress card scrolls out of view to show floating indicator
+    // Also calculate overall scroll percentage for the visual indicator
     useEffect(() => {
         const handleScroll = () => {
+            // Floating Indicator Logic
             if (progressCardRef.current && ayahs.length > 0) {
                 const rect = progressCardRef.current.getBoundingClientRect();
-                // Show when the card is mostly out of view (top of card is below viewport top + 100px)
-                // This makes it appear earlier than before
                 const isMostlyOutOfView = rect.top < 100;
                 setShowFloatingProgress(isMostlyOutOfView);
             } else {
                 setShowFloatingProgress(false);
             }
+
+            // Scroll Progress Bar Logic
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+            const scrollPercent = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+            setScrollProgress(Math.min(100, Math.max(0, scrollPercent)));
         };
 
         window.addEventListener('scroll', handleScroll, { passive: true });
@@ -256,6 +270,68 @@ function SurahDetail() {
 
         return () => window.removeEventListener('scroll', handleScroll);
     }, [ayahs]);
+
+    // IntersectionObserver to track currently reading ayah
+    useEffect(() => {
+        if (!trackReadingProgress || playingAyah !== null || ayahs.length === 0) return;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                // Find the first visible ayah that is near the top of the viewport
+                const visibleEntries = entries.filter(entry => entry.isIntersecting);
+
+                if (visibleEntries.length > 0) {
+                    // Sort by proximity to top of viewport
+                    visibleEntries.sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+
+                    // Pick the top-most visible ayah (or the one taking up most space?)
+                    // Let's pick the first one that has its top relatively visible
+                    const targetEntry = visibleEntries[0];
+
+                    // Extract index from ref check or data attribute if we added one (we rely on ref array index mapping effectively)
+                    // Since specific refs are hard to reverse-lookup from element without IDs or data attrs, 
+                    // let's assume we can rely on data-index attribute we will add to the card.
+                    const index = parseInt(targetEntry.target.getAttribute('data-index'));
+
+                    if (!isNaN(index) && index >= 0) {
+                        setReadingAyah(index);
+
+                        // Debounced save progress
+                        if (isAuthenticated && ayahs[index]) {
+                            if (readingProgressSaveTimeoutRef.current) {
+                                clearTimeout(readingProgressSaveTimeoutRef.current);
+                            }
+
+                            readingProgressSaveTimeoutRef.current = setTimeout(() => {
+                                // Only save if still strictly tracking and not playing
+                                if (audioRef.current && !audioRef.current.paused) return;
+                                saveProgress(parseInt(id), ayahs[index].id, ayahs[index].number_in_surah);
+                            }, 2000); // 2 second dwell time
+                        }
+                    }
+                }
+            },
+            {
+                root: null,
+                rootMargin: '-10% 0px -60% 0px', // Active area is top part of screen
+                threshold: 0.1
+            }
+        );
+
+        // Observe all ayah cards
+        ayahs.forEach((_, index) => {
+            if (ayahRefs.current[index]) {
+                observer.observe(ayahRefs.current[index]);
+            }
+        });
+
+        return () => {
+            if (readingProgressSaveTimeoutRef.current) {
+                clearTimeout(readingProgressSaveTimeoutRef.current);
+            }
+            observer.disconnect();
+        };
+    }, [ayahs, trackReadingProgress, playingAyah, isAuthenticated, id]);
 
     // Clean up preloaded audio when reciter changes
     useEffect(() => {
@@ -815,6 +891,15 @@ function SurahDetail() {
             {/* Hidden Audio Player */}
             <audio ref={audioRef} preload="none" />
 
+            {/* Scroll Progress Bar */}
+            <div
+                className="reading-progress-bar"
+                style={{
+                    width: `${scrollProgress}%`,
+                    opacity: scrollProgress > 1 ? 1 : 0
+                }}
+            />
+
             {/* Header with Surah Info */}
             <div className="page-header">
                 {/* Back to Surahs Link - positioned at top left */}
@@ -996,6 +1081,22 @@ function SurahDetail() {
                                         Auto-play next
                                     </label>
                                 </div>
+
+                                {/* Reading Progress Tracking Toggle */}
+                                <div className="align-center d-flex" style={{ paddingTop: '24px' }}>
+                                    <label className="checkbox-label" title="Automatically save your reading progress as you scroll">
+                                        <input
+                                            type="checkbox"
+                                            checked={trackReadingProgress}
+                                            onChange={(e) => {
+                                                const newValue = e.target.checked;
+                                                setTrackReadingProgress(newValue);
+                                                localStorage.setItem('trackReadingProgress', newValue);
+                                            }}
+                                        />
+                                        Track reading progress
+                                    </label>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1153,6 +1254,7 @@ function SurahDetail() {
                             return (
                                 <div
                                     key={ayah.id}
+                                    data-index={index}
                                     ref={(el) => ayahRefs.current[index] = el}
                                     className={`ayah-card ${isPlaying ? 'playing' : ''} ${isCompleted ? 'completed' : ''} ${isHighlighted ? 'highlighted' : ''}`}
                                 >
