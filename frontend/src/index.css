@@ -1258,21 +1258,7 @@ code {
     contain: layout;
 }
 
-.ayah-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 4px;
-    height: 100%;
-    background: var(--gradient-accent);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
 
-.ayah-card.playing::before {
-    opacity: 1;
-}
 
 .ayah-card::after {
     content: '';
@@ -1420,7 +1406,7 @@ code {
 /* Surah Back Link - positioned at top left */
 .surah-back-link {
     position: absolute;
-    top: 0;
+    top: -4px;
     left: 0;
     z-index: 10;
 }

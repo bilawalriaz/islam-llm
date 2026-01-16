@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { searchQuran, getSurahs, getEditions } from '../api/client';
+import { searchQuran, getSurahs } from '../api/client';
 import { LoadingState, EmptyState } from '../components/Spinner';
 
 /**
  * SearchPage - Full-text search across Quran ayahs
  *
  * Features:
- * - Diacritic-insensitive Arabic search
- * - English text search across all translations
+ * - Diacritic-insensitive Arabic search (Uthmani text)
+ * - English text search (Saheeh International translation)
  * - Auto-detects query language
- * - Filter by language, edition, surah
+ * - Filter by language, surah
  * - Debounced search input (300ms)
  * - Infinite scroll pagination
  * - Click results to navigate to surah context
@@ -22,14 +22,12 @@ function SearchPage() {
     // Search state from URL params
     const initialQuery = searchParams.get('q') || '';
     const initialLanguage = searchParams.get('language') || '';
-    const initialEdition = searchParams.get('edition') || '';
     const initialSurahId = searchParams.get('surah_id') || '';
 
     // Component state
     const [query, setQuery] = useState(initialQuery);
     const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
     const [language, setLanguage] = useState(initialLanguage);
-    const [edition, setEdition] = useState(initialEdition);
     const [surahId, setSurahId] = useState(initialSurahId);
     const [results, setResults] = useState([]);
     const [totalCount, setTotalCount] = useState(0);
@@ -41,7 +39,6 @@ function SearchPage() {
 
     // Reference data
     const [surahs, setSurahs] = useState([]);
-    const [editions, setEditions] = useState([]);
 
     // Refs for debouncing and infinite scroll
     const debounceTimerRef = useRef(null);
@@ -52,12 +49,8 @@ function SearchPage() {
     useEffect(() => {
         const loadReferenceData = async () => {
             try {
-                const [surahsData, editionsData] = await Promise.all([
-                    getSurahs(),
-                    getEditions().catch(() => [])
-                ]);
+                const surahsData = await getSurahs();
                 setSurahs(surahsData);
-                setEditions(editionsData);
             } catch (err) {
                 console.error('Failed to load reference data:', err);
             }
@@ -89,10 +82,9 @@ function SearchPage() {
         const params = {};
         if (debouncedQuery) params.q = debouncedQuery;
         if (language) params.language = language;
-        if (edition) params.edition = edition;
         if (surahId) params.surah_id = surahId;
         setSearchParams(params);
-    }, [debouncedQuery, language, edition, surahId, setSearchParams]);
+    }, [debouncedQuery, language, surahId, setSearchParams]);
 
     // Perform search
     useEffect(() => {
@@ -115,7 +107,6 @@ function SearchPage() {
                     offset: page * 50,
                 };
                 if (language) options.language = language;
-                if (edition) options.edition = edition;
                 if (surahId) options.surah_id = parseInt(surahId);
 
                 const data = await searchQuran(debouncedQuery, options);
@@ -132,7 +123,7 @@ function SearchPage() {
         };
 
         performSearch();
-    }, [debouncedQuery, language, edition, surahId, page]);
+    }, [debouncedQuery, language, surahId, page]);
 
     // Load more results (infinite scroll)
     const loadMore = useCallback(async () => {
@@ -147,7 +138,6 @@ function SearchPage() {
                 offset: offset,
             };
             if (language) options.language = language;
-            if (edition) options.edition = edition;
             if (surahId) options.surah_id = parseInt(surahId);
 
             const data = await searchQuran(debouncedQuery, options);
@@ -156,7 +146,7 @@ function SearchPage() {
         } catch (err) {
             console.error('Failed to load more results:', err);
         }
-    }, [loading, hasMore, page, debouncedQuery, language, edition, surahId]);
+    }, [loading, hasMore, page, debouncedQuery, language, surahId]);
 
     // Setup infinite scroll observer
     useEffect(() => {
@@ -181,14 +171,9 @@ function SearchPage() {
         };
     }, [hasMore]);
 
-    // Handle result click - pass edition info via URL params
-    const handleResultClick = (surahId, ayahNumber, edition = null) => {
-        const params = new URLSearchParams();
-        if (edition) {
-            params.set('edition', edition);
-        }
-        const queryString = params.toString();
-        navigate(`/quran/${surahId}${queryString ? '?' + queryString : ''}#ayah-${ayahNumber}`);
+    // Handle result click - navigate to surah with ayah anchor
+    const handleResultClick = (surahId, ayahNumber) => {
+        navigate(`/quran/${surahId}#ayah-${ayahNumber}`);
     };
 
     // Handle filter changes
@@ -198,9 +183,6 @@ function SearchPage() {
         switch (key) {
             case 'language':
                 setLanguage(value);
-                break;
-            case 'edition':
-                setEdition(value);
                 break;
             case 'surahId':
                 setSurahId(value);
@@ -260,24 +242,6 @@ function SearchPage() {
                             </select>
                         </div>
 
-                        {/* Edition Filter */}
-                        <div>
-                            <select
-                                className="form-select"
-                                value={edition || ''}
-                                onChange={(e) => handleFilterChange('edition', e.target.value)}
-                                style={{ minWidth: '180px' }}
-                                disabled={!editions.length}
-                            >
-                                <option value="">All editions</option>
-                                {editions.map((e) => (
-                                    <option key={e.identifier} value={e.identifier}>
-                                        {e.english_name || e.name}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
                         {/* Surah Filter */}
                         <div>
                             <select
@@ -333,7 +297,7 @@ function SearchPage() {
                         <div
                             key={`${result.edition}-${result.ayah_number}-${index}`}
                             className="search-result-card card"
-                            onClick={() => handleResultClick(result.surah_id, result.number_in_surah, result.edition)}
+                            onClick={() => handleResultClick(result.surah_id, result.number_in_surah)}
                         >
                             <div className="card-body">
                                 {/* Result Header */}

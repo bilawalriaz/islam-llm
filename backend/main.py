@@ -339,7 +339,6 @@ def get_ayah_audio(ayah_number: int, edition: str = Query("ar.alafasy")):
 def search_quran(
     q: str = Query(..., description="Search query text", min_length=1),
     language: Optional[str] = Query(None, description="Filter by language: ar, en, or all (default: auto-detect)"),
-    edition: Optional[str] = Query(None, description="Filter by specific edition identifier"),
     surah_id: Optional[int] = Query(None, description="Filter to specific surah"),
     limit: int = Query(50, description="Max results (default: 50, max: 200)", ge=1, le=200),
     offset: int = Query(0, description="Pagination offset", ge=0)
@@ -347,7 +346,7 @@ def search_quran(
     """
     Full-text search across Quran ayahs using FTS5.
 
-    Supports diacritic-insensitive Arabic search and English text search.
+    Searches Uthmani Arabic text and Saheeh International English translation.
     Auto-detects query language if not specified.
     """
     import re
@@ -380,26 +379,27 @@ def search_quran(
         results = []
         total_count = 0
 
+        # Get edition IDs for fixed editions
+        cursor.execute("SELECT id FROM editions WHERE identifier = ?", ('quran-uthmani',))
+        uthmani_row = cursor.fetchone()
+        uthmani_id = uthmani_row[0] if uthmani_row else None
+
+        cursor.execute("SELECT id FROM editions WHERE identifier = ?", ('en.sahih',))
+        saheeh_row = cursor.fetchone()
+        saheeh_id = saheeh_row[0] if saheeh_row else None
+
         # Build the search query based on language
         if language == 'ar':
-            # Arabic search - use text_normalized column
-            where_clause = "WHERE fts_arabic MATCH ?"
+            # Arabic search from Uthmani only
+            where_clause = "WHERE fts_arabic MATCH ? AND e.identifier = 'quran-uthmani'"
             params = [normalized_query]
-
-            # Add filters
-            if edition:
-                cursor.execute("SELECT id FROM editions WHERE identifier = ?", (edition,))
-                edition_row = cursor.fetchone()
-                if edition_row:
-                    where_clause += " AND f.edition_id = ?"
-                    params.append(edition_row[0])
 
             if surah_id:
                 where_clause += " AND f.surah_id = ?"
                 params.append(surah_id)
 
             # Get total count
-            count_sql = f"SELECT COUNT(*) FROM fts_arabic f {where_clause}"
+            count_sql = f"SELECT COUNT(*) FROM fts_arabic f JOIN editions e ON f.edition_id = e.id {where_clause}"
             cursor.execute(count_sql, params)
             total_count = cursor.fetchone()[0]
 
@@ -443,24 +443,16 @@ def search_quran(
                 })
 
         elif language == 'en':
-            # English search
-            where_clause = "WHERE fts_english MATCH ?"
+            # English search from Saheeh International only
+            where_clause = "WHERE fts_english MATCH ? AND e.identifier = 'en.sahih'"
             params = [normalized_query]
-
-            # Add filters
-            if edition:
-                cursor.execute("SELECT id FROM editions WHERE identifier = ?", (edition,))
-                edition_row = cursor.fetchone()
-                if edition_row:
-                    where_clause += " AND f.edition_id = ?"
-                    params.append(edition_row[0])
 
             if surah_id:
                 where_clause += " AND f.surah_id = ?"
                 params.append(surah_id)
 
             # Get total count
-            count_sql = f"SELECT COUNT(*) FROM fts_english f {where_clause}"
+            count_sql = f"SELECT COUNT(*) FROM fts_english f JOIN editions e ON f.edition_id = e.id {where_clause}"
             cursor.execute(count_sql, params)
             total_count = cursor.fetchone()[0]
 
@@ -505,31 +497,15 @@ def search_quran(
                     "language": row["language"]
                 })
 
-        else:  # language == 'all' or search both
-            # Search both Arabic and English
-            # This is a simplified version - searches both and combines results
-            arabic_where = "WHERE fts_arabic MATCH ?"
-            english_where = "WHERE fts_english MATCH ?"
+        else:  # language == 'all' - search both Uthmani and Saheeh
+            # Arabic results from Uthmani
+            arabic_where = "WHERE fts_arabic MATCH ? AND e.identifier = 'quran-uthmani'"
             arabic_params = [normalized_query]
-            english_params = [normalized_query]
-
-            # Add filters
-            if edition:
-                cursor.execute("SELECT id FROM editions WHERE identifier = ?", (edition,))
-                edition_row = cursor.fetchone()
-                if edition_row:
-                    arabic_where += " AND f.edition_id = ?"
-                    english_where += " AND f.edition_id = ?"
-                    arabic_params.append(edition_row[0])
-                    english_params.append(edition_row[0])
 
             if surah_id:
                 arabic_where += " AND f.surah_id = ?"
-                english_where += " AND f.surah_id = ?"
                 arabic_params.append(surah_id)
-                english_params.append(surah_id)
 
-            # Arabic results
             arabic_sql = f"""
                 SELECT
                     f.ayah_id,
@@ -568,9 +544,16 @@ def search_quran(
                     "language": row["language"]
                 })
 
-            # English results
+            # English results from Saheeh
             remaining = limit - len(results)
             if remaining > 0:
+                english_where = "WHERE fts_english MATCH ? AND e.identifier = 'en.sahih'"
+                english_params = [normalized_query]
+
+                if surah_id:
+                    english_where += " AND f.surah_id = ?"
+                    english_params.append(surah_id)
+
                 english_sql = f"""
                     SELECT
                         f.ayah_id,
