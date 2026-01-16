@@ -1602,6 +1602,45 @@ async def get_overall_completion_stats(current_user: dict = Depends(get_current_
     }
 
 
+@app.get("/api/progress/all-surahs")
+async def get_all_surahs_progress(current_user: dict = Depends(get_current_user)):
+    """Get detailed progress for all 114 surahs."""
+    # Get all surahs basic info
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, number_of_ayahs FROM surahs ORDER BY id")
+        all_surahs = cursor.fetchall()
+    finally:
+        conn.close()
+
+    # Get completed ayahs count per surah
+    client = supabase_admin or supabase
+    completed_response = client.table("completed_ayahs").select("surah_id").eq("user_id", current_user["id"]).execute()
+    
+    surah_counts = {}
+    if completed_response.data:
+        for item in completed_response.data:
+            s_id = item["surah_id"]
+            surah_counts[s_id] = surah_counts.get(s_id, 0) + 1
+            
+    # Build result
+    results = []
+    for surah in all_surahs:
+        s_id = surah["id"]
+        total = surah["number_of_ayahs"]
+        count = surah_counts.get(s_id, 0)
+        
+        results.append({
+            "surah_id": s_id,
+            "completed_count": count,
+            "total_ayahs": total,
+            "completion_percentage": round((count / total) * 100, 1) if total > 0 else 0
+        })
+        
+    return results
+
+
 @app.delete("/api/completed-ayahs/surah/{surah_id}")
 async def clear_surah_progress(
     surah_id: int,
