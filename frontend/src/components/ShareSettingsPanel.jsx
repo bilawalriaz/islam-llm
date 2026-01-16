@@ -4,10 +4,10 @@ import { getShareSettings, generateShareProfile, updateShareSettings, getSharePr
 import { LoadingState } from '../components/Spinner';
 
 /**
- * ShareSettings - Component for managing share profile settings
- * Users can toggle which stats to show, select themes, and copy their share URL
+ * ShareSettingsPanel - Component for managing share profile settings
+ * Embeddable panel for the Journey page
  */
-export default function ShareSettings() {
+export default function ShareSettingsPanel() {
     const { user } = useAuth();
     const [settings, setSettings] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -111,9 +111,9 @@ export default function ShareSettings() {
     // No profile yet
     if (!settings) {
         return (
-            <div style={styles.container}>
+            <div className="share-settings-panel">
                 <div style={styles.header}>
-                    <h1 style={styles.title}>Share Your Progress</h1>
+                    <h2 style={styles.title}>Share Your Progress</h2>
                     <p style={styles.subtitle}>
                         Create a unique shareable profile to show your Quran reading progress to friends and family.
                     </p>
@@ -141,9 +141,9 @@ export default function ShareSettings() {
     }
 
     return (
-        <div style={styles.container}>
+        <div className="share-settings-panel">
             <div style={styles.header}>
-                <h1 style={styles.title}>Share Your Progress</h1>
+                <h2 style={styles.title}>Share Your Progress</h2>
                 <p style={styles.subtitle}>
                     Customize your public profile and share your Quran journey.
                 </p>
@@ -298,9 +298,7 @@ function Toggle({ label, description, checked, onChange }) {
 
 const styles = {
     container: {
-        maxWidth: '700px',
-        margin: '0 auto',
-        padding: '20px',
+        width: '100%',
         textAlign: 'center',
     },
     header: {
@@ -308,7 +306,7 @@ const styles = {
         textAlign: 'center',
     },
     title: {
-        fontSize: '32px',
+        fontSize: '24px',
         fontWeight: '700',
         margin: '0 0 12px 0',
         color: '#1c1917',

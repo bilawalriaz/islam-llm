@@ -3197,7 +3197,41 @@ code {
     transition: all 0.2s ease;
 }
 
-.btn-icon-logout:hover {
-    background: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
+/* Mobile fixes */
+@media (max-width: 768px) {
+
+    /* Fix overlap on Surah Detail page header */
+    .surah-back-link {
+        position: static;
+        margin-bottom: 16px;
+        display: inline-flex;
+    }
+
+    /* Ensure page header stacks correctly on mobile */
+    .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+    }
+
+    .surah-header-info {
+        width: 100%;
+    }
+
+    .surah-title-container {
+        justify-content: flex-start;
+        /* Ensure title stays left aligned if needed */
+    }
+
+    .page-header-actions {
+        width: 100%;
+        margin-top: 16px;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .page-header-actions .btn {
+        width: 100%;
+        justify-content: center;
+    }
 }

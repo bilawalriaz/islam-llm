@@ -14,7 +14,7 @@ import QuranHome from './pages/QuranHome'
 import SurahDetail from './pages/SurahDetail'
 import SearchPage from './pages/SearchPage'
 import SharedProfile from './pages/SharedProfile'
-import SharedProfile from './pages/SharedProfile'
+
 
 /**
  * ProtectedRoute - Wrapper that redirects to login if not authenticated

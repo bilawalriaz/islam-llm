@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Card, StatCard } from '../components/Card';
 import { getBookmarks, getProgressStats, getLastPosition, getAllSurahsProgress, getSurahs } from '../api/client';
 import { LoadingState } from '../components/Spinner';
+import ShareSettingsPanel from '../components/ShareSettingsPanel';
 
 /**
  * Journey - Detailed Quran reading progress tracking
@@ -23,6 +24,7 @@ function Journey() {
     const [selectedSurah, setSelectedSurah] = useState(null);
     const [viewMode, setViewMode] = useState('all'); // 'all', 'in-progress', 'completed', 'not-started'
     const [showAllBookmarks, setShowAllBookmarks] = useState(false);
+    const [activeTab, setActiveTab] = useState('journey'); // 'journey', 'share'
 
     useEffect(() => {
         loadProgressData();
@@ -125,189 +127,213 @@ function Journey() {
                 </div>
             </div>
 
-            {/* Overview Stats */}
-            <div className="stats-grid">
-                <StatCard value={`${overallPercentage}%`} label="Overall Complete" />
-                <StatCard value={stats.total_ayahs_read.toString()} label="Ayahs Read" />
-                <StatCard value={stats.total_surahs_read.toString()} label="Surahs Started" />
-                <StatCard value={stats.reading_streak.toString()} label="Day Streak" />
+            {/* Main Tabs */}
+            <div className="filter-tabs" style={{ marginBottom: '24px', justifyContent: 'center' }}>
+                <button
+                    className={`filter-tab ${activeTab === 'journey' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('journey')}
+                    style={{ fontSize: '1rem', padding: '12px 24px' }}
+                >
+                    My Journey
+                </button>
+                <button
+                    className={`filter-tab ${activeTab === 'share' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('share')}
+                    style={{ fontSize: '1rem', padding: '12px 24px' }}
+                >
+                    Share Profile
+                </button>
             </div>
 
-            {/* Overall Progress Bar */}
-            <Card className="mb-4">
-                <div className="card-body">
-                    <div className="d-flex justify-between align-center mb-2">
-                        <span className="text-muted small">Total Quran Completion</span>
-                        <span className="text-muted small">
-                            {stats.total_ayahs_read} / {totalAyahsInQuran} ayahs
-                        </span>
+            {activeTab === 'share' ? (
+                <ShareSettingsPanel />
+            ) : (
+                <>
+                    {/* Overview Stats */}
+                    <div className="stats-grid">
+                        <StatCard value={`${overallPercentage}%`} label="Overall Complete" />
+                        <StatCard value={stats.total_ayahs_read.toString()} label="Ayahs Read" />
+                        <StatCard value={stats.total_surahs_read.toString()} label="Surahs Started" />
+                        <StatCard value={stats.reading_streak.toString()} label="Day Streak" />
                     </div>
-                    <div className="progress-bar-large">
-                        <div
-                            className="progress-bar-fill"
-                            style={{ width: `${overallPercentage}%` }}
-                        />
-                    </div>
-                </div>
-            </Card>
 
-            {/* Quick Actions */}
-            <div className="progress-quick-actions">
-                {lastPosition && (
-                    <Link
-                        to={`/quran/${lastPosition.surah_id}`}
-                        className="btn btn-primary"
-                    >
-                        Continue Reading: {lastPosition.surah_name}
-                    </Link>
-                )}
-            </div>
-
-            {/* Filter Tabs */}
-            <div className="filter-tabs">
-                <button
-                    className={`filter-tab ${viewMode === 'all' ? 'active' : ''}`}
-                    onClick={() => setViewMode('all')}
-                >
-                    All Surahs
-                </button>
-                <button
-                    className={`filter-tab ${viewMode === 'in-progress' ? 'active' : ''}`}
-                    onClick={() => setViewMode('in-progress')}
-                >
-                    In Progress
-                </button>
-                <button
-                    className={`filter-tab ${viewMode === 'completed' ? 'active' : ''}`}
-                    onClick={() => setViewMode('completed')}
-                >
-                    Completed
-                </button>
-                <button
-                    className={`filter-tab ${viewMode === 'not-started' ? 'active' : ''}`}
-                    onClick={() => setViewMode('not-started')}
-                >
-                    Not Started
-                </button>
-            </div>
-
-            {/* Surahs Grid */}
-            <div className="surah-progress-grid">
-                {filteredSurahs.map((surah) => {
-                    const percentage = Math.round((surah.completed_count / surah.total_ayahs) * 100);
-                    const color = getCompletionColor(percentage);
-
-                    return (
-                        <Link
-                            key={surah.surah_id}
-                            to={`/quran/${surah.surah_id}`}
-                            className="surah-progress-card"
-                        >
-                            <div className="surah-progress-header">
-                                <span className="surah-progress-number">{surah.surah_id}</span>
-                                <span
-                                    className="surah-progress-percentage"
-                                    style={{ color }}
-                                >
-                                    {percentage}%
+                    {/* Overall Progress Bar */}
+                    <Card className="mb-4">
+                        <div className="card-body">
+                            <div className="d-flex justify-between align-center mb-2">
+                                <span className="text-muted small">Total Quran Completion</span>
+                                <span className="text-muted small">
+                                    {stats.total_ayahs_read} / {totalAyahsInQuran} ayahs
                                 </span>
                             </div>
-                            <div className="surah-progress-info">
-                                <h3 className="surah-progress-name-arabic">{surah.name || surah.surah_name}</h3>
-                                <p className="surah-progress-name-english">{surah.english_name}</p>
-                                <p className="surah-progress-stats">
-                                    {surah.completed_count} / {surah.total_ayahs} ayahs
-                                </p>
-                            </div>
-                            <div className="surah-progress-bar">
+                            <div className="progress-bar-large">
                                 <div
-                                    className="surah-progress-fill"
-                                    style={{
-                                        width: `${percentage}%`,
-                                        background: color,
-                                    }}
+                                    className="progress-bar-fill"
+                                    style={{ width: `${overallPercentage}%` }}
                                 />
                             </div>
-                            {percentage === 100 && (
-                                <div className="surah-progress-badge completed">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                                        <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
-                                    Completed
-                                </div>
-                            )}
-                            {surah.completed_count > 0 && percentage < 100 && (
-                                <div className="surah-progress-badge in-progress">
-                                    In Progress
-                                </div>
-                            )}
-                        </Link>
-                    );
-                })}
-            </div>
-
-            {/* Bookmarks Section */}
-            <Card title={bookmarks.length > 0 ? `Your Bookmarks (${bookmarks.length})` : "Bookmarks"} className="mt-4">
-                {bookmarks.length > 0 ? (
-                    <>
-                        <div className="bookmarks-list">
-                            {(showAllBookmarks ? bookmarks : bookmarks.slice(0, 5)).map((bookmark) => (
-                                <div key={bookmark.id} className="bookmark-item">
-                                    <div className="bookmark-info">
-                                        <span className="bookmark-surah-number">{bookmark.surah_id}</span>
-                                        <div className="bookmark-details">
-                                            <Link
-                                                to={`/quran/${bookmark.surah_id}#ayah-${bookmark.ayah_number_in_surah}`}
-                                                className="bookmark-surah"
-                                            >
-                                                {bookmark.surah_name}
-                                            </Link>
-                                            <p className="small text-muted mb-2">
-                                                {bookmark.english_name} &bull; Ayah {bookmark.ayah_number_in_surah}
-                                            </p>
-                                            {bookmark.ayah_text && (
-                                                <p className="ayah-text-snippet">
-                                                    {bookmark.ayah_text}
-                                                </p>
-                                            )}
-                                            {bookmark.ayah_english && (
-                                                <p className="ayah-english-snippet">
-                                                    {bookmark.ayah_english}
-                                                </p>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <button
-                                        className="btn-icon"
-                                        onClick={() => handleDeleteBookmark(bookmark.id)}
-                                        title="Remove bookmark"
-                                    >
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                                        </svg>
-                                    </button>
-                                </div>
-                            ))}
                         </div>
-                        {bookmarks.length > 5 && (
-                            <button
-                                className="btn-view-all"
-                                onClick={() => setShowAllBookmarks(!showAllBookmarks)}
+                    </Card>
+
+                    {/* Quick Actions */}
+                    <div className="progress-quick-actions">
+                        {lastPosition && (
+                            <Link
+                                to={`/quran/${lastPosition.surah_id}`}
+                                className="btn btn-primary"
                             >
-                                {showAllBookmarks ? 'Show Less' : `View All ${bookmarks.length} Bookmarks`}
-                            </button>
+                                Continue Reading: {lastPosition.surah_name}
+                            </Link>
                         )}
-                    </>
-                ) : (
-                    <div className="empty-state">
-                        <p className="text-muted">Bookmark ayahs to find them quickly later.</p>
-                        <Link to="/quran" className="btn btn-secondary mt-4">
-                            Browse Quran
-                        </Link>
                     </div>
-                )}
-            </Card>
+
+                    {/* Filter Tabs */}
+                    <div className="filter-tabs">
+                        <button
+                            className={`filter-tab ${viewMode === 'all' ? 'active' : ''}`}
+                            onClick={() => setViewMode('all')}
+                        >
+                            All Surahs
+                        </button>
+                        <button
+                            className={`filter-tab ${viewMode === 'in-progress' ? 'active' : ''}`}
+                            onClick={() => setViewMode('in-progress')}
+                        >
+                            In Progress
+                        </button>
+                        <button
+                            className={`filter-tab ${viewMode === 'completed' ? 'active' : ''}`}
+                            onClick={() => setViewMode('completed')}
+                        >
+                            Completed
+                        </button>
+                        <button
+                            className={`filter-tab ${viewMode === 'not-started' ? 'active' : ''}`}
+                            onClick={() => setViewMode('not-started')}
+                        >
+                            Not Started
+                        </button>
+                    </div>
+
+                    {/* Surahs Grid */}
+                    <div className="surah-progress-grid">
+                        {filteredSurahs.map((surah) => {
+                            const percentage = Math.round((surah.completed_count / surah.total_ayahs) * 100);
+                            const color = getCompletionColor(percentage);
+
+                            return (
+                                <Link
+                                    key={surah.surah_id}
+                                    to={`/quran/${surah.surah_id}`}
+                                    className="surah-progress-card"
+                                >
+                                    <div className="surah-progress-header">
+                                        <span className="surah-progress-number">{surah.surah_id}</span>
+                                        <span
+                                            className="surah-progress-percentage"
+                                            style={{ color }}
+                                        >
+                                            {percentage}%
+                                        </span>
+                                    </div>
+                                    <div className="surah-progress-info">
+                                        <h3 className="surah-progress-name-arabic">{surah.name || surah.surah_name}</h3>
+                                        <p className="surah-progress-name-english">{surah.english_name}</p>
+                                        <p className="surah-progress-stats">
+                                            {surah.completed_count} / {surah.total_ayahs} ayahs
+                                        </p>
+                                    </div>
+                                    <div className="surah-progress-bar">
+                                        <div
+                                            className="surah-progress-fill"
+                                            style={{
+                                                width: `${percentage}%`,
+                                                background: color,
+                                            }}
+                                        />
+                                    </div>
+                                    {percentage === 100 && (
+                                        <div className="surah-progress-badge completed">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                                <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                            Completed
+                                        </div>
+                                    )}
+                                    {surah.completed_count > 0 && percentage < 100 && (
+                                        <div className="surah-progress-badge in-progress">
+                                            In Progress
+                                        </div>
+                                    )}
+                                </Link>
+                            );
+                        })}
+                    </div>
+
+                    {/* Bookmarks Section */}
+                    <Card title={bookmarks.length > 0 ? `Your Bookmarks (${bookmarks.length})` : "Bookmarks"} className="mt-4">
+                        {bookmarks.length > 0 ? (
+                            <>
+                                <div className="bookmarks-list">
+                                    {(showAllBookmarks ? bookmarks : bookmarks.slice(0, 5)).map((bookmark) => (
+                                        <div key={bookmark.id} className="bookmark-item">
+                                            <div className="bookmark-info">
+                                                <span className="bookmark-surah-number">{bookmark.surah_id}</span>
+                                                <div className="bookmark-details">
+                                                    <Link
+                                                        to={`/quran/${bookmark.surah_id}#ayah-${bookmark.ayah_number_in_surah}`}
+                                                        className="bookmark-surah"
+                                                    >
+                                                        {bookmark.surah_name}
+                                                    </Link>
+                                                    <p className="small text-muted mb-2">
+                                                        {bookmark.english_name} &bull; Ayah {bookmark.ayah_number_in_surah}
+                                                    </p>
+                                                    {bookmark.ayah_text && (
+                                                        <p className="ayah-text-snippet">
+                                                            {bookmark.ayah_text}
+                                                        </p>
+                                                    )}
+                                                    {bookmark.ayah_english && (
+                                                        <p className="ayah-english-snippet">
+                                                            {bookmark.ayah_english}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <button
+                                                className="btn-icon"
+                                                onClick={() => handleDeleteBookmark(bookmark.id)}
+                                                title="Remove bookmark"
+                                            >
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                                {bookmarks.length > 5 && (
+                                    <button
+                                        className="btn-view-all"
+                                        onClick={() => setShowAllBookmarks(!showAllBookmarks)}
+                                    >
+                                        {showAllBookmarks ? 'Show Less' : `View All ${bookmarks.length} Bookmarks`}
+                                    </button>
+                                )}
+                            </>
+                        ) : (
+                            <div className="empty-state">
+                                <p className="text-muted">Bookmark ayahs to find them quickly later.</p>
+                                <Link to="/quran" className="btn btn-secondary mt-4">
+                                    Browse Quran
+                                </Link>
+                            </div>
+                        )}
+                    </Card>
+                </>
+            )}
         </div>
     );
 }
