@@ -29,8 +29,8 @@ from share_image import generate_ayah_image_bytes
 from supabase import create_client, Client
 
 # Database paths
-DB_PATH = Path(__file__).parent.parent / "quran-dump" / "quran.db"
-AUDIO_PATH = Path(__file__).parent.parent / "quran-dump" / "audio"
+DB_PATH = Path(os.environ.get("DB_PATH", Path(__file__).parent.parent / "quran-dump" / "quran.db"))
+AUDIO_PATH = Path(os.environ.get("AUDIO_PATH", Path(__file__).parent.parent / "quran-dump" / "audio"))
 
 # Supabase configuration
 SUPABASE_URL = "https://zxmyoojcuihavbhiblwc.supabase.co"

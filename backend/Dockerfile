@@ -6,18 +6,30 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install dependencies
-COPY requirements.txt .
+# Note: Context should be the root of the project
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir gunicorn uvicorn[standard]
 
-# Copy the rest of the application
-COPY . .
+# Create directory for audio (will be mounted)
+RUN mkdir -p /app/quran-dump/audio
+
+# Copy backend code
+COPY backend/ .
+
+# Copy database (53MB)
+COPY quran-dump/quran.db /app/quran-dump/quran.db
 
 # Expose the backend port
 EXPOSE 8001
+
+# Environment variables for paths
+ENV DB_PATH=/app/quran-dump/quran.db
+ENV AUDIO_PATH=/app/quran-dump/audio
 
 # Run the application with Gunicorn
 CMD ["gunicorn", "main:app", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8001"]
