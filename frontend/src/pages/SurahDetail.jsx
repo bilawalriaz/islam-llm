@@ -964,179 +964,117 @@ function SurahDetail() {
                     </div>
                 </div>
                 <div className="page-header-actions">
-                    {!autoPlay ? (
-                        <>
-                            <Button variant="success" onClick={playAll}>
+                    <div className="split-btn-group">
+                        {!autoPlay ? (
+                            <Button variant="success" onClick={playAll} className="split-btn-main">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                     <polygon points="5 3 19 12 5 21 5 3"></polygon>
                                 </svg>
-                                Play Surah from Start
+                                Play Surah
                             </Button>
-                            {isAuthenticated && completedAyahs.length > 0 && (() => {
-                                const firstGap = findFirstGap();
-                                return firstGap !== null && firstGap > 1;
-                            })() && (
-                                    <Button
-                                        variant="secondary"
-                                        onClick={() => {
-                                            const firstGap = findFirstGap();
-                                            if (firstGap) {
-                                                const gapIndex = ayahs.findIndex(a => a.number_in_surah === firstGap);
-                                                if (gapIndex >= 0) {
-                                                    setAutoPlay(true);
-                                                    playAyah(gapIndex);
-                                                    ayahRefs.current[gapIndex]?.scrollIntoView({
-                                                        behavior: 'smooth',
-                                                        block: 'center',
-                                                    });
-                                                }
-                                            }
-                                        }}
-                                    >
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                                        </svg>
-                                        Catch up from Ayah {findFirstGap()}
-                                    </Button>
-                                )}
-                        </>
-                    ) : (
-                        <Button variant="danger" onClick={stopPlayback}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                <rect x="6" y="4" width="4" height="16"></rect>
-                                <rect x="14" y="4" width="4" height="16"></rect>
+                        ) : (
+                            <Button variant="danger" onClick={stopPlayback} className="split-btn-main">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <rect x="6" y="4" width="4" height="16"></rect>
+                                    <rect x="14" y="4" width="4" height="16"></rect>
+                                </svg>
+                                Stop
+                            </Button>
+                        )}
+                        <button
+                            className={`split-btn-arrow ${showOptions ? 'active' : ''}`}
+                            onClick={() => setShowOptions(!showOptions)}
+                            title={showOptions ? 'Hide options' : 'Show options'}
+                        >
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <circle cx="12" cy="12" r="3"></circle>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                             </svg>
-                            Stop
-                        </Button>
-                    )}
-                    <button
-                        className={`btn-icon ${showOptions ? 'active' : ''}`}
-                        onClick={() => setShowOptions(!showOptions)}
-                        title={showOptions ? 'Hide options' : 'Show options'}
-                        style={{ marginLeft: '8px' }}
-                    >
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <circle cx="12" cy="12" r="3"></circle>
-                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                        </svg>
-                    </button>
+                        </button>
 
-                    {/* Reading Progress Tracking Toggle - Visible in header */}
-                    <div style={{ marginLeft: '16px', display: 'flex', alignItems: 'center' }}>
-                        <label className="checkbox-label" style={{ marginBottom: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }} title="Automatically save your reading progress as you scroll">
-                            <input
-                                type="checkbox"
-                                checked={trackReadingProgress}
-                                onChange={(e) => {
-                                    const newValue = e.target.checked;
-                                    setTrackReadingProgress(newValue);
-                                    localStorage.setItem('trackReadingProgress', newValue);
-                                }}
-                                style={{ marginRight: '6px' }}
-                            />
-                            Track Reading
-                        </label>
-                    </div>
-                </div>
-            </div>
-
-            {/* Edition Controls - Hidden by default, toggle with settings button */}
-            {
-                showOptions && (
-                    <div className="card mb-4">
-                        <div className="card-body">
-                            <div className="d-flex flex-wrap gap-3">
-                                {/* Audio Reciter Selection */}
-                                <div style={{ flex: '1', minWidth: '220px' }}>
-                                    <label className="form-label">Reciter</label>
+                        {showOptions && (
+                            <div className="settings-dropdown">
+                                <div className="settings-dropdown-header">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                    </svg>
+                                    Settings
+                                </div>
+                                <div className="settings-group">
+                                    <label className="settings-label">Reciter</label>
                                     <select
                                         className="form-select"
                                         value={selectedAudioEdition}
-                                        onChange={(e) => {
-                                            // Save current playing state (both playing and paused)
-                                            const wasPlaying = playingAyah !== null;
-                                            const currentAyahIndex = playingAyah !== null
-                                                ? playingAyah
-                                                : lastPlayingAyahRef.current;
-                                            const newEdition = e.target.value;
-
-                                            // Change reciter
-                                            setSelectedAudioEdition(newEdition);
-
-                                            // If something was playing or paused, restart from the same ayah with new reciter
-                                            if (currentAyahIndex !== null && currentAyahIndex !== undefined) {
-                                                // Pass new edition directly to avoid race condition
-                                                playAyah(currentAyahIndex, newEdition);
-                                                // If it wasn't playing before, pause it after starting
-                                                if (!wasPlaying) {
-                                                    pauseAyah();
-                                                }
-                                            }
-                                        }}
+                                        onChange={(e) => setSelectedAudioEdition(e.target.value)}
                                     >
-                                        {audioEditions.map(edition => (
-                                            <option key={edition.identifier} value={edition.identifier}>
-                                                {getReciterName(edition.identifier)}
+                                        {simplifiedReciters.map(reciter => (
+                                            <option key={reciter.identifier} value={reciter.identifier}>
+                                                {reciter.name}
                                             </option>
                                         ))}
                                     </select>
                                 </div>
-
-                                {/* Text Edition Selection */}
-                                <div style={{ flex: '1', minWidth: '200px' }}>
-                                    <label className="form-label">Arabic Text</label>
+                                <div className="settings-group">
+                                    <label className="settings-label">Translation</label>
                                     <select
                                         className="form-select"
                                         value={selectedTextEdition}
                                         onChange={(e) => handleTextEditionChange(e.target.value)}
                                     >
-                                        {textEditions
-                                            .filter(e => e.language === 'ar' && e.type === 'quran')
-                                            .map(edition => (
-                                                <option key={edition.identifier} value={edition.identifier}>
-                                                    {edition.english_name}
-                                                </option>
-                                            ))}
+                                        <option value="quran-uthmani">Original Arabic</option>
+                                        <option value="en.sahih">English (Sahih International)</option>
+                                        <option value="en.pickthall">English (Pickthall)</option>
+                                        <option value="ur.jalandhry">Urdu (Jalandhry)</option>
                                     </select>
                                 </div>
-
-                                {/* Translation Selection */}
-                                <div style={{ flex: '1', minWidth: '200px' }}>
-                                    <label className="form-label">Translation</label>
-                                    <select
-                                        className="form-select"
-                                        value={selectedTranslation}
-                                        onChange={(e) => setSelectedTranslation(e.target.value)}
-                                    >
-                                        <option value="none">No Translation</option>
-                                        {textEditions
-                                            .filter(e => e.type === 'translation')
-                                            .map(edition => (
-                                                <option key={edition.identifier} value={edition.identifier}>
-                                                    {edition.english_name}
-                                                </option>
-                                            ))}
-                                    </select>
-                                </div>
-
-                                {/* Auto-play Toggle */}
-                                <div className="align-center d-flex" style={{ paddingTop: '24px' }}>
-                                    <label className="checkbox-label">
+                                <div className="settings-group">
+                                    <label className="checkbox-label" style={{ marginBottom: 0, fontSize: '0.875rem' }}>
                                         <input
                                             type="checkbox"
-                                            checked={autoPlay}
-                                            onChange={(e) => setAutoPlay(e.target.checked)}
+                                            checked={trackReadingProgress}
+                                            onChange={(e) => {
+                                                const newValue = e.target.checked;
+                                                setTrackReadingProgress(newValue);
+                                                localStorage.setItem('trackReadingProgress', newValue);
+                                            }}
                                         />
-                                        Auto-play next
+                                        Update progress on scroll
                                     </label>
                                 </div>
-
-
                             </div>
-                        </div>
+                        )}
                     </div>
-                )
-            }
+
+                    {!autoPlay && isAuthenticated && completedAyahs.length > 0 && (() => {
+                        const firstGap = findFirstGap();
+                        return firstGap !== null && firstGap > 1;
+                    })() && (
+                            <Button
+                                variant="secondary"
+                                className="catch-up-btn"
+                                onClick={() => {
+                                    const firstGap = findFirstGap();
+                                    if (firstGap) {
+                                        const gapIndex = ayahs.findIndex(a => a.number_in_surah === firstGap);
+                                        if (gapIndex >= 0) {
+                                            setAutoPlay(true);
+                                            playAyah(gapIndex);
+                                            ayahRefs.current[gapIndex]?.scrollIntoView({
+                                                behavior: 'smooth',
+                                                block: 'center',
+                                            });
+                                        }
+                                    }
+                                }}
+                            >
+                                Catch up from Ayah {findFirstGap()}
+                            </Button>
+                        )}
+                </div>
+            </div>
+
+
 
             {/* Surah Progress Card (for all users) */}
             <div className="card mb-4" ref={progressCardRef}>

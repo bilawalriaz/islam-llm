@@ -815,9 +815,11 @@ body {
 .page-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-end;
     margin-bottom: 32px;
     position: relative;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .page-header-actions {
@@ -2376,8 +2378,9 @@ code {
 
     .page-header {
         flex-direction: column;
-        align-items: flex-start;
+        align-items: center;
         gap: 16px;
+        padding-bottom: 16px;
     }
 
     /* Center surah header info on mobile */
@@ -3206,20 +3209,21 @@ code {
         display: inline-flex;
     }
 
-    /* Ensure page header stacks correctly on mobile */
-    .page-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 16px;
-    }
+    @media (max-width: 600px) {
+        .page-header {
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
 
-    .surah-header-info {
-        width: 100%;
-    }
+        .surah-header-info {
+            width: 100%;
+            text-align: center;
+        }
 
-    .surah-title-container {
-        justify-content: flex-start;
-        /* Ensure title stays left aligned if needed */
+        .surah-title-container {
+            justify-content: center;
+        }
     }
 
     .page-header-actions {
@@ -3250,4 +3254,147 @@ code {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     pointer-events: none;
     will-change: transform;
+}
+
+/* Split Button Styles */
+.split-btn-group {
+    display: inline-flex;
+    align-items: stretch;
+    background: transparent;
+    gap: 0;
+    position: relative;
+}
+
+.split-btn-group .btn {
+    height: 44px;
+    margin: 0;
+}
+
+.split-btn-group .split-btn-main {
+    border-top-right-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.2) !important;
+    padding-right: 16px;
+    display: inline-flex;
+    align-items: center;
+}
+
+.split-btn-group .split-btn-arrow {
+    padding: 0 12px;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    border: none;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-top-right-radius: var(--radius-md);
+    border-bottom-right-radius: var(--radius-md);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.split-btn-group .split-btn-arrow:hover {
+    filter: brightness(1.1);
+    transform: none;
+}
+
+.split-btn-group .split-btn-arrow.active {
+    filter: brightness(0.9);
+}
+
+/* Settings Dropdown */
+.settings-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 280px;
+    background: var(--bg-white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-soft);
+    border: 1px solid var(--border-color);
+    padding: 20px;
+    z-index: 100;
+    animation: slideUp 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.settings-dropdown-header {
+    font-weight: 700;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.settings-group {
+    margin-bottom: 20px;
+}
+
+.settings-group:last-child {
+    margin-bottom: 0;
+}
+
+.settings-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+/* Handle Stop Button Case (Danger) */
+.split-btn-group .btn-danger+.split-btn-arrow {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+.surah-back-link {
+    margin-bottom: 0 !important;
+}
+
+@media (max-width: 768px) {
+    .surah-title-arabic {
+        text-align: center;
+        width: 100%;
+        display: block;
+    }
+
+    .page-header-actions {
+        justify-content: center;
+    }
+
+    .settings-dropdown {
+        right: 50%;
+        transform: translateX(50%);
+        width: calc(100vw - 48px);
+        max-width: 320px;
+    }
+
+    @keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translate(50%, 10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translate(50%, 0);
+        }
+    }
 }
