@@ -229,12 +229,27 @@ function Journey() {
                                 >
                                     <div className="surah-progress-header">
                                         <span className="surah-progress-number">{surah.surah_id}</span>
-                                        <span
-                                            className="surah-progress-percentage"
-                                            style={{ color }}
-                                        >
-                                            {percentage}%
-                                        </span>
+                                        <div className="surah-progress-status-stack">
+                                            {percentage === 100 && (
+                                                <div className="surah-progress-badge completed">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                                        <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                                                    </svg>
+                                                    Completed
+                                                </div>
+                                            )}
+                                            {surah.completed_count > 0 && percentage < 100 && (
+                                                <div className="surah-progress-badge in-progress">
+                                                    In Progress
+                                                </div>
+                                            )}
+                                            <span
+                                                className="surah-progress-percentage"
+                                                style={{ color }}
+                                            >
+                                                {percentage}%
+                                            </span>
+                                        </div>
                                     </div>
                                     <div className="surah-progress-info">
                                         <h3 className="surah-progress-name-arabic">{surah.name || surah.surah_name}</h3>
@@ -252,19 +267,6 @@ function Journey() {
                                             }}
                                         />
                                     </div>
-                                    {percentage === 100 && (
-                                        <div className="surah-progress-badge completed">
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                                                <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                                            </svg>
-                                            Completed
-                                        </div>
-                                    )}
-                                    {surah.completed_count > 0 && percentage < 100 && (
-                                        <div className="surah-progress-badge in-progress">
-                                            In Progress
-                                        </div>
-                                    )}
                                 </Link>
                             );
                         })}
