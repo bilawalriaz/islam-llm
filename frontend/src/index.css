@@ -232,6 +232,17 @@ body {
     }
 }
 
+.desktop-only-skeleton {
+    display: flex;
+    gap: 12px;
+}
+
+@media (max-width: 768px) {
+    .desktop-only-skeleton {
+        display: none;
+    }
+}
+
 /* =============================================================================
    BUTTONS
    ============================================================================= */
@@ -3135,4 +3146,58 @@ code {
     border-radius: 8px;
     padding: 2px 4px;
     /* Adjust for Arabic line height quirks if needed */
+}
+
+/* User Profile in Nav */
+.user-profile-pill {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px;
+    background: rgba(0, 0, 0, 0.03);
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    border-radius: 100px;
+}
+
+.user-avatar-small {
+    width: 28px;
+    height: 28px;
+    background: var(--gradient-accent);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.875rem;
+    box-shadow: var(--shadow-glow-accent);
+}
+
+.user-name-text {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    max-width: 150px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.btn-icon-logout {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.btn-icon-logout:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
 }

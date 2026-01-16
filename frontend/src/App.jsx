@@ -14,7 +14,7 @@ import QuranHome from './pages/QuranHome'
 import SurahDetail from './pages/SurahDetail'
 import SearchPage from './pages/SearchPage'
 import SharedProfile from './pages/SharedProfile'
-import ShareSettings from './pages/ShareSettings'
+import SharedProfile from './pages/SharedProfile'
 
 /**
  * ProtectedRoute - Wrapper that redirects to login if not authenticated
@@ -151,17 +151,7 @@ function AppRoutes() {
                 <Route index element={<Analytics />} />
             </Route>
 
-            {/* Share settings page - protected route */}
-            <Route
-                path="/share/settings"
-                element={
-                    <ProtectedRoute>
-                        <Layout />
-                    </ProtectedRoute>
-                }
-            >
-                <Route index element={<ShareSettings />} />
-            </Route>
+
 
             {/* Catch all - redirect to home */}
             <Route path="*" element={<Navigate to="/" replace />} />

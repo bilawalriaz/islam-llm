@@ -39,7 +39,7 @@ function Layout() {
                             <div className="logo-mark">Q</div>
                             <span className="logo-text">Quran Reader</span>
                         </div>
-                        <div style={{ display: 'flex', gap: '12px' }}>
+                        <div className="desktop-only-skeleton">
                             <div className="skeleton" style={{ width: '80px', height: '36px', borderRadius: 'var(--radius-md)' }} />
                             <div className="skeleton" style={{ width: '80px', height: '36px', borderRadius: 'var(--radius-md)' }} />
                         </div>
@@ -84,17 +84,13 @@ function Layout() {
                                 <NavLink to="/quran" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={closeMobileMenu}>
                                     Quran
                                 </NavLink>
-                                <NavLink to="/" end className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={closeMobileMenu}>
-                                    Home
-                                </NavLink>
+
                                 {isAuthenticated && (
                                     <>
                                         <NavLink to="/journey" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={closeMobileMenu}>
                                             Journey
                                         </NavLink>
-                                        <NavLink to="/share/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={closeMobileMenu}>
-                                            Share
-                                        </NavLink>
+
                                         <div className="nav-continue-journey" onClick={closeMobileMenu}>
                                             <ContinueJourney variant="compact" />
                                         </div>
@@ -103,9 +99,18 @@ function Layout() {
                                 {/* Add more nav links here */}
                             </nav>
                             <div className={`user-menu ${mobileMenuOpen ? 'user-menu-open' : ''}`}>
-                                <span className="user-name">{user?.name || user?.email}</span>
-                                <button onClick={handleLogout} className="btn btn-secondary btn-small">
-                                    Logout
+                                <div className="user-profile-pill">
+                                    <div className="user-avatar-small">
+                                        {(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
+                                    </div>
+                                    <span className="user-name-text">{user?.name || user?.email}</span>
+                                </div>
+                                <button onClick={handleLogout} className="btn-icon-logout" title="Logout">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                                        <polyline points="16 17 21 12 16 7"></polyline>
+                                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                                    </svg>
                                 </button>
                             </div>
                         </>
