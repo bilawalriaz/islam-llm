@@ -14,6 +14,7 @@ const TOTAL_AYAHS_IN_QURAN = 6236;
  */
 function Account() {
     const { user } = useAuth();
+    const sessionToken = localStorage.getItem('session_token');
 
     const [stats, setStats] = useState({
         total_ayahs_read: 0,
@@ -25,6 +26,15 @@ function Account() {
     const [bookmarks, setBookmarks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showAllBookmarks, setShowAllBookmarks] = useState(false);
+
+    // Password change state
+    const [passwordForm, setPasswordForm] = useState({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+    });
+    const [passwordMessage, setPasswordMessage] = useState('');
+    const [passwordLoading, setPasswordLoading] = useState(false);
 
     useEffect(() => {
         loadAccountData();
@@ -54,7 +64,7 @@ function Account() {
                 method: 'DELETE',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('session_token')}`,
+                    'Authorization': `Bearer ${sessionToken}`,
                 },
             });
 
@@ -67,6 +77,52 @@ function Account() {
             setStats(statsData);
         } catch (err) {
             console.error('Failed to delete bookmark:', err);
+        }
+    };
+
+    const handlePasswordChange = async (e) => {
+        e.preventDefault();
+        setPasswordMessage('');
+        setPasswordLoading(true);
+
+        // Validate
+        if (passwordForm.newPassword.length < 6) {
+            setPasswordMessage('Password must be at least 6 characters');
+            setPasswordLoading(false);
+            return;
+        }
+
+        if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+            setPasswordMessage('Passwords do not match');
+            setPasswordLoading(false);
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/auth/change-password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${sessionToken}`,
+                },
+                body: JSON.stringify({
+                    current_password: passwordForm.currentPassword,
+                    new_password: passwordForm.newPassword
+                }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                setPasswordMessage('Password updated successfully!');
+                setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+            } else {
+                setPasswordMessage(data.error || data.detail || 'Failed to update password');
+            }
+        } catch (err) {
+            setPasswordMessage('Failed to update password. Please try again.');
+        } finally {
+            setPasswordLoading(false);
         }
     };
 
@@ -91,8 +147,8 @@ function Account() {
             </div>
 
             <div className="account-actions">
-                <Link to="/progress" className="btn btn-primary">
-                    View Detailed Progress
+                <Link to="/journey" className="btn btn-primary">
+                    View Detailed Journey
                 </Link>
             </div>
 
@@ -148,6 +204,11 @@ function Account() {
                                                         {bookmark.ayah_text}
                                                     </p>
                                                 )}
+                                                {bookmark.ayah_english && (
+                                                    <p className="ayah-english-snippet">
+                                                        {bookmark.ayah_english}
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                         <button
@@ -201,6 +262,84 @@ function Account() {
                             <li>Auto-play settings</li>
                         </ul>
                         <p className="small text-muted mt-4">Coming soon!</p>
+                    </div>
+                </Card>
+
+                {/* Account Settings */}
+                <Card title="Account Settings">
+                    <div className="account-settings">
+                        <div className="account-info" style={{ marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid var(--border-color)' }}>
+                            <p className="small text-muted mb-1">Email</p>
+                            <p style={{ fontSize: '1rem', fontWeight: '500' }}>{user?.email}</p>
+                        </div>
+
+                        <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '16px' }}>Change Password</h4>
+                        <p className="small text-muted mb-4">
+                            Set a password to sign in with email instead of Google, or update your existing password.
+                        </p>
+
+                        <form className="password-change-form" onSubmit={handlePasswordChange}>
+                            <div className="form-group" style={{ marginBottom: '16px' }}>
+                                <label htmlFor="currentPassword" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                                    Current Password
+                                </label>
+                                <input
+                                    id="currentPassword"
+                                    type="password"
+                                    value={passwordForm.currentPassword}
+                                    onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                                    placeholder="Enter current password (leave empty if signing in with Google)"
+                                    style={{ width: '100%', padding: '10px 14px', fontSize: '0.9375rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}
+                                />
+                            </div>
+
+                            <div className="form-group" style={{ marginBottom: '16px' }}>
+                                <label htmlFor="newPassword" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                                    New Password
+                                </label>
+                                <input
+                                    id="newPassword"
+                                    type="password"
+                                    value={passwordForm.newPassword}
+                                    onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                                    placeholder="Must be at least 6 characters"
+                                    required
+                                    minLength={6}
+                                    style={{ width: '100%', padding: '10px 14px', fontSize: '0.9375rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}
+                                />
+                            </div>
+
+                            <div className="form-group" style={{ marginBottom: '16px' }}>
+                                <label htmlFor="confirmPassword" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                                    Confirm New Password
+                                </label>
+                                <input
+                                    id="confirmPassword"
+                                    type="password"
+                                    value={passwordForm.confirmPassword}
+                                    onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                                    placeholder="Confirm new password"
+                                    required
+                                    minLength={6}
+                                    style={{ width: '100%', padding: '10px 14px', fontSize: '0.9375rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}
+                                />
+                            </div>
+
+                            {passwordMessage && (
+                                <div className={`alert ${passwordMessage.includes('success') ? 'alert-success' : 'alert-error'}`} style={{ padding: '12px', borderRadius: 'var(--radius-md)', marginBottom: '16px', fontSize: '0.875rem' }}>
+                                    {passwordMessage}
+                                </div>
+                            )}
+
+                            <button
+                                type="submit"
+                                className="btn btn-secondary"
+                                disabled={passwordLoading}
+                                style={{ width: '100%' }}
+                            >
+                                {passwordLoading ? 'Updating...' : 'Update Password'}
+                            </button>
+                        </form>
                     </div>
                 </Card>
             </div>

@@ -85,7 +85,14 @@ export async function register(data) {
     }
 
     const result = await response.json();
-    // Registration doesn't return session token, user must login
+
+    // Supabase auth may return session data on registration
+    // Store session token if available
+    const token = result.session?.access_token || result.session_token || result.access_token;
+    if (token) {
+        setSessionToken(token);
+    }
+
     return result;
 }
 
@@ -108,9 +115,12 @@ export async function login(email, password) {
 
     const result = await response.json();
 
-    // Store session token
-    if (result.session_token) {
-        setSessionToken(result.session_token);
+    // Store session token from Supabase auth response
+    // New format: { user: {...}, session: { access_token: ..., refresh_token: ... } }
+    // Old format: { user: {...}, session_token: ... }
+    const token = result.session?.access_token || result.session_token || result.access_token;
+    if (token) {
+        setSessionToken(token);
     }
 
     return result;
@@ -142,6 +152,58 @@ export async function getCurrentUser() {
  */
 export function isAuthenticated() {
     return !!getSessionToken();
+}
+
+/**
+ * Request password reset email
+ */
+export async function requestPasswordReset(email) {
+    const response = await fetch(`${API_BASE}/auth/forgot-password`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+    });
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(error.detail || error.error || 'Request failed');
+    }
+
+    return response.json();
+}
+
+/**
+ * Reset password using recovery token
+ */
+export async function resetPassword(accessToken, newPassword) {
+    const response = await fetch(`${API_BASE}/auth/reset-password`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            access_token: accessToken,
+            new_password: newPassword
+        }),
+    });
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Reset failed' }));
+        throw new Error(error.detail || error.error || 'Password reset failed');
+    }
+
+    return response.json();
+}
+
+/**
+ * Get the Google OAuth URL for sign-in
+ */
+export function getGoogleAuthUrl() {
+    const supabaseUrl = 'https://zxmyoojcuihavbhiblwc.supabase.co';
+    const redirectUri = `${window.location.origin}/auth/callback`;
+    return `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirectUri)}&skip_http_redirect=true`;
 }
 
 // =============================================================================
@@ -181,6 +243,21 @@ export async function getAudioEditions() {
  */
 export async function getEditions() {
     return fetchAPI('/quran/editions');
+}
+
+/**
+ * Search Quran with full-text search
+ * @param {string} query - Search query text
+ * @param {Object} options - Search options
+ * @param {string} options.language - Filter by language: 'ar', 'en', or 'all' (default: auto-detect)
+ * @param {string} options.edition - Filter by specific edition identifier
+ * @param {number} options.surah_id - Filter to specific surah
+ * @param {number} options.limit - Max results (default: 50, max: 200)
+ * @param {number} options.offset - Pagination offset (default: 0)
+ */
+export async function searchQuran(query, options = {}) {
+    const params = new URLSearchParams({ q: query, ...options });
+    return fetchAPI(`/quran/search?${params}`);
 }
 
 // =============================================================================
@@ -293,6 +370,21 @@ export async function markAyahCompleted(ayahId, surahId, ayahNumber) {
 }
 
 /**
+ * Mark multiple ayahs as completed in a batch
+ * @param {Array<{ayah_id, surah_id, ayah_number}>} ayahsList 
+ */
+export async function markAyahsBatchCompleted(ayahsList) {
+    if (!ayahsList || ayahsList.length === 0) return { success: true, count: 0 };
+
+    return fetchAPI('/completed-ayahs/batch', {
+        method: 'POST',
+        body: JSON.stringify({
+            ayahs: ayahsList
+        }),
+    });
+}
+
+/**
  * Get completed ayahs for a specific surah
  */
 export async function getCompletedAyahsForSurah(surahId) {
@@ -326,6 +418,16 @@ export async function getOverallCompletionStats() {
  */
 export async function getAllSurahsProgress() {
     return fetchAPI('/progress/all-surahs');
+}
+
+/**
+ * Clear all progress for a specific surah
+ * Deletes all completed ayahs for the given surah
+ */
+export async function clearSurahProgress(surahId) {
+    return fetchAPI(`/completed-ayahs/surah/${surahId}`, {
+        method: 'DELETE',
+    });
 }
 
 // =============================================================================
@@ -500,4 +602,78 @@ export function getAyahShareImageUrlById(ayahId, translation = 'en.sahih', squar
         format,
     });
     return `/api/share/ayah/by-id/${ayahId}?${params.toString()}`;
+}
+
+// =============================================================================
+// USER STATS SHARING API
+// =============================================================================
+
+/**
+ * Generate a new share profile for the authenticated user
+ * Creates a unique share_id if one doesn't exist
+ */
+export async function generateShareProfile() {
+    return fetchAPI('/share/generate', {
+        method: 'POST',
+    });
+}
+
+/**
+ * Get the current user's share profile settings
+ * Returns null if no share profile exists
+ */
+export async function getShareSettings() {
+    try {
+        return await fetchAPI('/share/settings');
+    } catch (e) {
+        // If 404 or not found, return null
+        return null;
+    }
+}
+
+/**
+ * Update the current user's share profile settings
+ * @param {Object} settings - Settings to update
+ * @param {string} settings.theme - Theme: 'classic', 'nature', 'dark', or 'minimal'
+ * @param {boolean} settings.show_reading_progress - Show reading progress stats
+ * @param {boolean} settings.show_completion - Show completion stats
+ * @param {boolean} settings.show_streak - Show reading streak
+ * @param {boolean} settings.show_bookmarks - Show bookmarks count
+ * @param {boolean} settings.show_listening_stats - Show listening stats
+ */
+export async function updateShareSettings(settings) {
+    return fetchAPI('/share/settings', {
+        method: 'PUT',
+        body: JSON.stringify(settings),
+    });
+}
+
+/**
+ * Get public stats for a share profile (no auth required)
+ * @param {string} shareId - The share ID (e.g., 'a7x2k9')
+ */
+export async function getPublicShareStats(shareId) {
+    const response = await fetch(`${API_BASE}/share/${shareId}`);
+    if (!response.ok) {
+        throw new Error('Share profile not found');
+    }
+    return response.json();
+}
+
+/**
+ * Get the share profile URL for a user
+ * @param {string} shareId - The share ID
+ * @returns {string} The full share URL
+ */
+export function getShareProfileUrl(shareId) {
+    return `${window.location.origin}/share/${shareId}`;
+}
+
+/**
+ * Get the OG image URL for a share profile
+ * @param {string} shareId - The share ID
+ * @returns {string} The OG image URL
+ */
+export function getShareProfileOgImageUrl(shareId) {
+    return `${window.location.origin}/api/share/og/${shareId}.png`;
 }

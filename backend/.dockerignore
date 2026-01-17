@@ -1,0 +1,9 @@
+# Ignore audio files to keep build context small (38GB!)
+audio/
+**/*.mp3
+**/*.wav
+node_modules/
+venv/
+__pycache__/
+*.db-journal
+*.db-wal

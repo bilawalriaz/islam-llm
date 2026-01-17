@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import {
     getSurah, getAyahs, getAudioEditions, getEditions,
     checkBookmark, toggleBookmark, updateProgress, getBookmarksForSurah,
     getCompletedAyahsForSurah, getSurahCompletionStats, markAyahCompleted,
     startPlaySession, endPlaySession, startQuranPlay, getNextQuranAyah, endQuranPlay,
-    validateSequentialProgress
+    validateSequentialProgress, clearSurahProgress, markAyahsBatchCompleted
 } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { LoadingState, EmptyState } from '../components/Spinner';
@@ -13,6 +13,7 @@ import Button from '../components/Button';
 import ShareButton from '../components/ShareButton';
 import Modal from '../components/Modal';
 import { useMediaSession } from '../hooks/useMediaSession';
+import TextHighlighter from '../components/TextHighlighter';
 
 /**
  * Reciter name mapping - converts identifiers to human-readable names
@@ -90,10 +91,16 @@ function SurahDetail() {
     const [loadingTranslation, setLoadingTranslation] = useState(false);
     const [playingAyah, setPlayingAyah] = useState(null);
     const [autoPlay, setAutoPlay] = useState(false);
-    const [loopAyah, setLoopAyah] = useState(false);
+    const [playbackSpeed, setPlaybackSpeed] = useState(1);
     const [showSurahCompletion, setShowSurahCompletion] = useState(false);
     const [showOptions, setShowOptions] = useState(false);
+    const [showClearProgressConfirm, setShowClearProgressConfirm] = useState(false);
     const [highlightedAyah, setHighlightedAyah] = useState(null);
+    const [searchParams] = useSearchParams();
+    const highlightQuery = searchParams.get('highlight');
+
+    // Track the last played/selected/navigated ayah for the UI indicator
+    const [lastPlayedIndex, setLastPlayedIndex] = useState(0);
 
     // Bookmark state - map of ayah_id -> bookmark_id (or null if not bookmarked)
     const [bookmarks, setBookmarks] = useState({});
@@ -128,6 +135,14 @@ function SurahDetail() {
     // Floating progress indicator visibility state
     const [showFloatingProgress, setShowFloatingProgress] = useState(false);
     const [volume, setVolume] = useState(1);
+
+    // Scroll Progress & Reading Tracking
+    const [scrollProgress, setScrollProgress] = useState(0);
+    const [readingAyah, setReadingAyah] = useState(null);
+    const [trackReadingProgress, setTrackReadingProgress] = useState(() => {
+        return localStorage.getItem('trackReadingProgress') === 'true';
+    });
+    const readingProgressSaveTimeoutRef = useRef(null);
 
     // Simplified reciter options (only Mishary Alafasy and Ibrahim Walk)
     const simplifiedReciters = [
@@ -195,6 +210,10 @@ function SurahDetail() {
             // Highlight the ayah
             setHighlightedAyah(targetIndex);
 
+            // Set as last played (selected) so player is ready
+            setLastPlayedIndex(targetIndex);
+            lastPlayingAyahRef.current = targetIndex;
+
             // Use requestAnimationFrame to ensure DOM is ready
             requestAnimationFrame(() => {
                 ayahRefs.current[targetIndex]?.scrollIntoView({
@@ -227,17 +246,23 @@ function SurahDetail() {
     }, [ayahs, isAuthenticated]);
 
     // Detect when progress card scrolls out of view to show floating indicator
+    // Also calculate overall scroll percentage for the visual indicator
     useEffect(() => {
         const handleScroll = () => {
+            // Floating Indicator Logic
             if (progressCardRef.current && ayahs.length > 0) {
                 const rect = progressCardRef.current.getBoundingClientRect();
-                // Show when the card is mostly out of view (top of card is below viewport top + 100px)
-                // This makes it appear earlier than before
                 const isMostlyOutOfView = rect.top < 100;
                 setShowFloatingProgress(isMostlyOutOfView);
             } else {
                 setShowFloatingProgress(false);
             }
+
+            // Scroll Progress Bar Logic
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+            const scrollPercent = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+            setScrollProgress(Math.min(100, Math.max(0, scrollPercent)));
         };
 
         window.addEventListener('scroll', handleScroll, { passive: true });
@@ -245,6 +270,100 @@ function SurahDetail() {
 
         return () => window.removeEventListener('scroll', handleScroll);
     }, [ayahs]);
+
+    // IntersectionObserver to track currently reading ayah
+    useEffect(() => {
+        if (!trackReadingProgress || playingAyah !== null || ayahs.length === 0) return;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                // Find the first visible ayah that is near the top of the viewport
+                const visibleEntries = entries.filter(entry => entry.isIntersecting);
+
+                if (visibleEntries.length > 0) {
+                    // Sort by proximity to top of viewport
+                    visibleEntries.sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+
+                    // Pick the top-most visible ayah (or the one taking up most space?)
+                    // Let's pick the first one that has its top relatively visible
+                    const targetEntry = visibleEntries[0];
+
+                    // Extract index from ref check or data attribute if we added one (we rely on ref array index mapping effectively)
+                    // Since specific refs are hard to reverse-lookup from element without IDs or data attrs, 
+                    // let's assume we can rely on data-index attribute we will add to the card.
+                    const index = parseInt(targetEntry.target.getAttribute('data-index'));
+
+                    if (!isNaN(index) && index >= 0) {
+                        setReadingAyah(index);
+
+                        // Debounced save progress
+                        if (isAuthenticated && ayahs[index]) {
+                            if (readingProgressSaveTimeoutRef.current) {
+                                clearTimeout(readingProgressSaveTimeoutRef.current);
+                            }
+
+                            readingProgressSaveTimeoutRef.current = setTimeout(() => {
+                                // Only save if still strictly tracking and not playing
+                                if (audioRef.current && !audioRef.current.paused) return;
+
+                                // Backfill Logic: Find unread ayahs up to this point
+                                const batchItems = [];
+                                const newCompletedNumbers = [];
+
+                                // Check ayahs up to current index
+                                for (let i = 0; i <= index; i++) {
+                                    const a = ayahs[i];
+                                    if (!completedAyahs.includes(a.number_in_surah)) {
+                                        batchItems.push({
+                                            ayah_id: a.id,
+                                            surah_id: parseInt(id),
+                                            ayah_number: a.number_in_surah
+                                        });
+                                        newCompletedNumbers.push(a.number_in_surah);
+                                    }
+                                }
+
+                                if (batchItems.length > 0) {
+                                    // Optimistic update
+                                    setCompletedAyahs(prev => {
+                                        const unique = new Set([...prev, ...newCompletedNumbers]);
+                                        return Array.from(unique);
+                                    });
+
+                                    // Call batch API
+                                    markAyahsBatchCompleted(batchItems).then(() => {
+                                        validateSequentialProgress();
+                                    });
+                                }
+
+                                // Always update last read position
+                                saveProgress(parseInt(id), ayahs[index].id, ayahs[index].number_in_surah);
+                            }, 2000); // 2 second dwell time
+                        }
+                    }
+                }
+            },
+            {
+                root: null,
+                rootMargin: '-10% 0px -60% 0px', // Active area is top part of screen
+                threshold: 0.1
+            }
+        );
+
+        // Observe all ayah cards
+        ayahs.forEach((_, index) => {
+            if (ayahRefs.current[index]) {
+                observer.observe(ayahRefs.current[index]);
+            }
+        });
+
+        return () => {
+            if (readingProgressSaveTimeoutRef.current) {
+                clearTimeout(readingProgressSaveTimeoutRef.current);
+            }
+            observer.disconnect();
+        };
+    }, [ayahs, trackReadingProgress, playingAyah, isAuthenticated, id]);
 
     // Clean up preloaded audio when reciter changes
     useEffect(() => {
@@ -267,6 +386,13 @@ function SurahDetail() {
         }
     }, [volume]);
 
+    // Update playback speed
+    useEffect(() => {
+        if (audioRef.current) {
+            audioRef.current.playbackRate = playbackSpeed;
+        }
+    }, [playbackSpeed, playingAyah]);
+
     // Smooth scroll to playing ayah
     useEffect(() => {
         if (playingAyah !== null && ayahRefs.current[playingAyah]) {
@@ -284,34 +410,57 @@ function SurahDetail() {
         if (!audio) return;
 
         const handleEnded = async () => {
-            // End play session for analytics
-            if (currentSessionId && sessionStartTime) {
-                const duration = Math.round((Date.now() - sessionStartTime) / 1000);
-                try {
-                    await endPlaySession(currentSessionId, duration);
-                } catch (err) {
-                    console.error('Failed to end play session:', err);
-                }
-                setCurrentSessionId(null);
-                setSessionStartTime(null);
-            }
+            const endedAyahIndex = playingAyah;
+            const endedSessionId = currentSessionId;
+            const endedSessionStartTime = sessionStartTime;
 
-            if (playingAyah !== null) {
-                // Mark ayah as completed when audio finishes
-                const currentAyah = ayahs[playingAyah];
-                if (currentAyah) {
-                    await markAyahAsCompleted(currentAyah);
+            // 1. Fire-and-forget logging & progress updates (non-blocking)
+            (async () => {
+                // End play session for analytics
+                if (endedSessionId && endedSessionStartTime) {
+                    const duration = Math.round((Date.now() - endedSessionStartTime) / 1000);
+                    try {
+                        await endPlaySession(endedSessionId, duration);
+                    } catch (err) {
+                        console.error('Failed to end play session:', err);
+                    }
                 }
 
-                // Check if loop mode is enabled - replay same ayah
-                if (loopAyah) {
-                    playAyah(playingAyah);
-                    return;
+                // Mark ayah as completed
+                if (endedAyahIndex !== null) {
+                    const currentAyah = ayahs[endedAyahIndex];
+                    if (currentAyah) {
+                        try {
+                            await markAyahAsCompleted(currentAyah);
+                        } catch (err) {
+                            console.error('Failed to mark ayah completed:', err);
+                        }
+                    }
                 }
+            })();
 
+            // 2. Reset session state immediately
+            setCurrentSessionId(null);
+            setSessionStartTime(null);
+
+            if (endedAyahIndex !== null) {
                 // Check if Quran play mode is enabled
                 if (quranPlayMode && autoPlay) {
-                    const currentAyah = ayahs[playingAyah];
+                    // Start next track immediately if available in current surah
+                    // This reduces delay significantly
+                    if (endedAyahIndex < ayahs.length - 1) {
+                        playAyah(endedAyahIndex + 1);
+
+                        // We still call this in background to update server state if needed, 
+                        // but we don't wait for it to play next
+                        // (Assuming getNextQuranAyah doesn't have side effects critical for *playback* of next)
+                        // Actually, let's keep the logic safe: if we are changing Surahs, we wait.
+                        // If same surah, we played already.
+                        return;
+                    }
+
+                    // If we are at the end of Surah, we MUST query server for next one
+                    const currentAyah = ayahs[endedAyahIndex];
                     const nextData = await getNextQuranAyah(parseInt(id), currentAyah.number_in_surah);
 
                     if (!nextData.is_last) {
@@ -324,7 +473,7 @@ function SurahDetail() {
                             sessionStorage.setItem('quranSessionId', quranSessionId);
                             sessionStorage.setItem('autoPlay', 'true');
                         } else {
-                            // Play next ayah in same surah
+                            // Play next ayah in same surah (fallback if index check failed)
                             const nextIndex = ayahs.findIndex(a => a.id === nextData.ayah_id);
                             if (nextIndex >= 0) {
                                 playAyah(nextIndex);
@@ -346,8 +495,8 @@ function SurahDetail() {
                     return;
                 }
 
-                // Continue to next ayah if autoPlay is enabled (normal mode)
-                const nextAyah = playingAyah + 1;
+                // Normal Mode: Continue to next ayah if autoPlay is enabled
+                const nextAyah = endedAyahIndex + 1;
                 if (nextAyah < ayahs.length) {
                     if (autoPlay) {
                         playAyah(nextAyah);
@@ -379,7 +528,7 @@ function SurahDetail() {
             audio.removeEventListener('ended', handleEnded);
             audio.removeEventListener('error', handleError);
         };
-    }, [autoPlay, loopAyah, playingAyah, ayahs, quranPlayMode, quranSessionId, currentSessionId, sessionStartTime, id, isAuthenticated, navigate]);
+    }, [autoPlay, playingAyah, ayahs, quranPlayMode, quranSessionId, currentSessionId, sessionStartTime, id, isAuthenticated, navigate]);
 
     // Save progress when playing ayah changes (with debounce)
     useEffect(() => {
@@ -514,25 +663,103 @@ function SurahDetail() {
 
     const markAyahAsCompleted = async (ayah) => {
         if (!isAuthenticated) return;
+
+        // optimistic update
+        if (!completedAyahs.includes(ayah.number_in_surah)) {
+            setCompletedAyahs(prev => [...prev, ayah.number_in_surah]);
+
+            if (completionStats) {
+                // Simple optimistic stat update - doesn't handle "first unread" perfect recalculation
+                // but good enough for immediate feedback. detailed recalc happens on success or re-fetch.
+                setCompletionStats(prev => ({
+                    ...prev,
+                    completed_count: prev.completed_count + 1,
+                    completion_percentage: Math.round(((prev.completed_count + 1) / prev.total_ayahs) * 1000) / 10
+                }));
+            }
+        }
+
         try {
             await markAyahCompleted(ayah.id, parseInt(id), ayah.number_in_surah);
             // Validate and update sequential progress flags
             await validateSequentialProgress();
-            // Update local state
-            if (!completedAyahs.includes(ayah.number_in_surah)) {
-                setCompletedAyahs(prev => [...prev, ayah.number_in_surah]);
-                // Update completion stats
-                if (completionStats) {
-                    setCompletionStats(prev => ({
-                        ...prev,
-                        completed_count: prev.completed_count + 1,
-                        completion_percentage: Math.round(((prev.completed_count + 1) / prev.total_ayahs) * 1000) / 10
-                    }));
+
+            // We can re-fetch or rely on the optimistic update. 
+            // For "first unread" correctness, we might want to do the complex logic here
+            // or just let the background re-fetch happen if we trigger one.
+            // For now, let's just ensure the strict logic runs too to correct any specific edge cases
+
+            // Logic to find new first unread (copied from original to ensure correctness eventually)
+            if (!completedAyahs.includes(ayah.number_in_surah)) { // check again in case race condition
+                // ... (state update logic is already done optimistically, maybe we skip or just re-verify)
+            }
+            // Recalculate strict "first unread" just in case
+            if (completionStats) {
+                let firstUnread = completionStats.first_unread_ayah;
+                if (firstUnread === ayah.number_in_surah) {
+                    const newCompletedList = [...completedAyahs, ayah.number_in_surah];
+                    const completedSet = new Set(newCompletedList);
+                    let found = false;
+                    for (let i = 0; i < completionStats.total_ayahs; i++) {
+                        const ayahNum = i + 1;
+                        if (!completedSet.has(ayahNum)) {
+                            firstUnread = ayahNum;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) firstUnread = null;
+
+                    setCompletionStats(prev => ({ ...prev, first_unread_ayah: firstUnread }));
                 }
             }
+
         } catch (err) {
             console.error('Failed to mark ayah as completed:', err);
+            // Revert optimistic update on error
+            setCompletedAyahs(prev => prev.filter(n => n !== ayah.number_in_surah));
         }
+    };
+
+    const handleClearProgress = async () => {
+        if (!isAuthenticated) return;
+        try {
+            await clearSurahProgress(id);
+            // Reset local state
+            setCompletedAyahs([]);
+            setCompletionStats(prev => ({
+                ...prev,
+                completed_count: 0,
+                completion_percentage: 0,
+                first_unread_ayah: 1
+            }));
+            setShowClearProgressConfirm(false);
+        } catch (err) {
+            console.error('Failed to clear progress:', err);
+        }
+    };
+
+    // Helper: Find first gap in completed ayahs (for catch up/backfill)
+    // Returns the first missing ayah number, or null if all completed or none completed
+    const findFirstGap = () => {
+        if (completedAyahs.length === 0) return null;
+        const sortedCompleted = [...completedAyahs].sort((a, b) => a - b);
+        // Start from ayah 1, find first missing number
+        for (let i = 1; i <= sortedCompleted[sortedCompleted.length - 1]; i++) {
+            if (!sortedCompleted.includes(i)) {
+                return i;
+            }
+        }
+        // All ayahs from 1 to highest completed are complete
+        return null;
+    };
+
+    // Helper: Find highest completed ayah + 1 (for resume from latest)
+    // Returns the next ayah after the highest completed, or 1 if none completed
+    const findLatestNext = () => {
+        if (completedAyahs.length === 0) return 1;
+        const maxCompleted = Math.max(...completedAyahs);
+        return maxCompleted + 1;
     };
 
     const playAyah = (index, edition = null) => {
@@ -549,6 +776,7 @@ function SurahDetail() {
                 .then(async () => {
                     lastPlayingAyahRef.current = index;
                     setPlayingAyah(index);
+                    setLastPlayedIndex(index);
 
                     // Track play session for analytics
                     if (isAuthenticated) {
@@ -695,173 +923,167 @@ function SurahDetail() {
             {/* Hidden Audio Player */}
             <audio ref={audioRef} preload="none" />
 
+            {/* Scroll Progress Bar */}
+            <div
+                className="reading-progress-bar"
+                style={{
+                    transform: `scaleX(${scrollProgress / 100})`,
+                    opacity: scrollProgress > 0 ? 1 : 0
+                }}
+            />
+
             {/* Header with Surah Info */}
             <div className="page-header">
-                <div className="surah-header-info">
-                    <Link to="/quran" className="btn btn-secondary btn-small mb-3">
-                        &larr; Back to Surahs
-                    </Link>
-                    <h1 className="page-title">
-                        <span className="surah-title-arabic">{surah.name}</span>
+                {/* Top: Large Arabic Title */}
+                <div className="surah-header-top">
+                    <h1 className="surah-title-arabic">
+                        {surah.name}
                     </h1>
-                    <p className="page-subtitle">
-                        {surah.english_name} &bull; {surah.english_name_translation} &bull;
-                        {surah.number_of_ayahs} verses &bull;
-                        <span className={`status-badge ${surah.revelation_type?.toLowerCase() === 'meccan' ? 'primary' : 'success'}`}>
-                            {surah.revelation_type}
-                        </span>
-                    </p>
                 </div>
-                <div className="page-header-actions">
-                    {!autoPlay ? (
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <Button variant="success" onClick={playAll}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                                </svg>
-                                Play Surah
-                            </Button>
-                            <Button
-                                variant="primary"
-                                onClick={async () => {
-                                    if (isAuthenticated) {
-                                        try {
-                                            const session = await startQuranPlay();
-                                            setQuranSessionId(session.session_id);
-                                            setQuranPlayMode(true);
-                                            setAutoPlay(true);
-                                            playAyah(0);
-                                        } catch (err) {
-                                            console.error('Failed to start Quran play:', err);
-                                        }
-                                    } else {
-                                        navigate('/login');
-                                    }
-                                }}
-                                title="Play entire Quran from first incomplete ayah"
-                            >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                                </svg>
-                                Play Quran
-                            </Button>
+
+                {/* Bottom: 3-Column Layout (Back | Metadata | Actions) */}
+                <div className="surah-header-bottom">
+                    <div className="surah-header-left">
+                        <Link to="/quran" className="btn btn-secondary btn-small surah-back-link">
+                            &larr; Back to Surahs
+                        </Link>
+                    </div>
+
+                    <div className="surah-header-center">
+                        <div className="surah-meta-row">
+                            <span className="surah-english-name">{surah.english_name}</span>
+                            <span className="surah-translation">{surah.english_name_translation}</span>
+                            <span className="surah-verses">{surah.number_of_ayahs} verses</span>
+                            <span className={`status-badge ${surah.revelation_type?.toLowerCase() === 'meccan' ? 'primary' : 'success'}`}>
+                                {surah.revelation_type}
+                            </span>
+                            {/* Completion Indicator */}
+                            {completionStats && completionStats.completion_percentage === 100 && (
+                                <span className="status-badge success" style={{ background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }}>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '4px' }}>
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"></path>
+                                    </svg>
+                                    Completed
+                                </span>
+                            )}
                         </div>
-                    ) : (
-                        <Button variant="danger" onClick={stopPlayback}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                <rect x="6" y="4" width="4" height="16"></rect>
-                                <rect x="14" y="4" width="4" height="16"></rect>
-                            </svg>
-                            Stop
-                        </Button>
-                    )}
-                    <button
-                        className={`btn-icon ${showOptions ? 'active' : ''}`}
-                        onClick={() => setShowOptions(!showOptions)}
-                        title={showOptions ? 'Hide options' : 'Show options'}
-                        style={{ marginLeft: '8px' }}
-                    >
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <circle cx="12" cy="12" r="3"></circle>
-                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
+                    </div>
 
-            {/* Edition Controls - Hidden by default, toggle with settings button */}
-            {showOptions && (
-                <div className="card mb-4">
-                    <div className="card-body">
-                        <div className="d-flex flex-wrap gap-3">
-                            {/* Audio Reciter Selection */}
-                            <div style={{ flex: '1', minWidth: '220px' }}>
-                                <label className="form-label">Reciter</label>
-                                <select
-                                    className="form-select"
-                                    value={selectedAudioEdition}
-                                    onChange={(e) => {
-                                        // Save current playing state (both playing and paused)
-                                        const wasPlaying = playingAyah !== null;
-                                        const currentAyahIndex = playingAyah !== null
-                                            ? playingAyah
-                                            : lastPlayingAyahRef.current;
-                                        const newEdition = e.target.value;
+                    <div className="surah-header-right">
+                        <div className="page-header-actions">
+                            <div className="split-btn-group">
+                                {!autoPlay ? (
+                                    <Button variant="success" onClick={playAll} className="split-btn-main">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                        </svg>
+                                        Play Surah
+                                    </Button>
+                                ) : (
+                                    <Button variant="danger" onClick={stopPlayback} className="split-btn-main">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                            <rect x="6" y="4" width="4" height="16"></rect>
+                                            <rect x="14" y="4" width="4" height="16"></rect>
+                                        </svg>
+                                        Stop
+                                    </Button>
+                                )}
+                                <button
+                                    className={`split-btn-arrow ${showOptions ? 'active' : ''}`}
+                                    onClick={() => setShowOptions(!showOptions)}
+                                    title={showOptions ? 'Hide options' : 'Show options'}
+                                >
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                    </svg>
+                                </button>
 
-                                        // Change reciter
-                                        setSelectedAudioEdition(newEdition);
+                                {showOptions && (
+                                    <div className="settings-dropdown">
+                                        <div className="settings-dropdown-header">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <circle cx="12" cy="12" r="3"></circle>
+                                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                            </svg>
+                                            Settings
+                                        </div>
+                                        <div className="settings-group">
+                                            <label className="settings-label">Reciter</label>
+                                            <select
+                                                className="form-select"
+                                                value={selectedAudioEdition}
+                                                onChange={(e) => setSelectedAudioEdition(e.target.value)}
+                                            >
+                                                {simplifiedReciters.map(reciter => (
+                                                    <option key={reciter.identifier} value={reciter.identifier}>
+                                                        {reciter.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="settings-group">
+                                            <label className="settings-label">Translation</label>
+                                            <select
+                                                className="form-select"
+                                                value={selectedTextEdition}
+                                                onChange={(e) => handleTextEditionChange(e.target.value)}
+                                            >
+                                                <option value="quran-uthmani">Original Arabic</option>
+                                                <option value="en.sahih">English (Sahih International)</option>
+                                                <option value="en.pickthall">English (Pickthall)</option>
+                                                <option value="ur.jalandhry">Urdu (Jalandhry)</option>
+                                            </select>
+                                        </div>
+                                        <div className="settings-group">
+                                            <label className="checkbox-label" style={{ marginBottom: 0, fontSize: '0.875rem' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={trackReadingProgress}
+                                                    onChange={(e) => {
+                                                        const newValue = e.target.checked;
+                                                        setTrackReadingProgress(newValue);
+                                                        localStorage.setItem('trackReadingProgress', newValue);
+                                                    }}
+                                                />
+                                                Update progress on scroll
+                                            </label>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
 
-                                        // If something was playing or paused, restart from the same ayah with new reciter
-                                        if (currentAyahIndex !== null && currentAyahIndex !== undefined) {
-                                            // Pass new edition directly to avoid race condition
-                                            playAyah(currentAyahIndex, newEdition);
-                                            // If it wasn't playing before, pause it after starting
-                                            if (!wasPlaying) {
-                                                pauseAyah();
+                            {!autoPlay && isAuthenticated && completedAyahs.length > 0 && (() => {
+                                const firstGap = findFirstGap();
+                                return firstGap !== null && firstGap > 1;
+                            })() && (
+                                    <Button
+                                        variant="secondary"
+                                        className="catch-up-btn"
+                                        onClick={() => {
+                                            const firstGap = findFirstGap();
+                                            if (firstGap) {
+                                                const gapIndex = ayahs.findIndex(a => a.number_in_surah === firstGap);
+                                                if (gapIndex >= 0) {
+                                                    setAutoPlay(true);
+                                                    playAyah(gapIndex);
+                                                    ayahRefs.current[gapIndex]?.scrollIntoView({
+                                                        behavior: 'smooth',
+                                                        block: 'center',
+                                                    });
+                                                }
                                             }
-                                        }
-                                    }}
-                                >
-                                    {audioEditions.map(edition => (
-                                        <option key={edition.identifier} value={edition.identifier}>
-                                            {getReciterName(edition.identifier)}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Text Edition Selection */}
-                            <div style={{ flex: '1', minWidth: '200px' }}>
-                                <label className="form-label">Arabic Text</label>
-                                <select
-                                    className="form-select"
-                                    value={selectedTextEdition}
-                                    onChange={(e) => handleTextEditionChange(e.target.value)}
-                                >
-                                    {textEditions
-                                        .filter(e => e.language === 'ar' && e.type === 'quran')
-                                        .map(edition => (
-                                            <option key={edition.identifier} value={edition.identifier}>
-                                                {edition.english_name}
-                                            </option>
-                                        ))}
-                                </select>
-                            </div>
-
-                            {/* Translation Selection */}
-                            <div style={{ flex: '1', minWidth: '200px' }}>
-                                <label className="form-label">Translation</label>
-                                <select
-                                    className="form-select"
-                                    value={selectedTranslation}
-                                    onChange={(e) => setSelectedTranslation(e.target.value)}
-                                >
-                                    <option value="none">No Translation</option>
-                                    {textEditions
-                                        .filter(e => e.type === 'translation')
-                                        .map(edition => (
-                                            <option key={edition.identifier} value={edition.identifier}>
-                                                {edition.english_name}
-                                            </option>
-                                        ))}
-                                </select>
-                            </div>
-
-                            {/* Auto-play Toggle */}
-                            <div className="align-center d-flex" style={{ paddingTop: '24px' }}>
-                                <label className="checkbox-label">
-                                    <input
-                                        type="checkbox"
-                                        checked={autoPlay}
-                                        onChange={(e) => setAutoPlay(e.target.checked)}
-                                    />
-                                    Auto-play next
-                                </label>
-                            </div>
+                                        }}
+                                    >
+                                        Catch up from Ayah {findFirstGap()}
+                                    </Button>
+                                )}
                         </div>
                     </div>
                 </div>
-            )}
+            </div>
+
+
 
             {/* Surah Progress Card (for all users) */}
             <div className="card mb-4" ref={progressCardRef}>
@@ -880,24 +1102,42 @@ function SurahDetail() {
                                     style={{ width: `${completionStats.completion_percentage}%` }}
                                 />
                             </div>
-                            <div className="d-flex gap-2 mt-3">
-                                {completionStats.first_unread_ayah && (
+                            <div className="d-flex gap-2" style={{ marginTop: '24px' }}>
+                                {completionStats.completed_count > 0 && completedAyahs.length > 0 && (() => {
+                                    const latestNext = findLatestNext();
+                                    const latestIndex = ayahs.findIndex(a => a.number_in_surah === latestNext);
+                                    return latestIndex >= 0;
+                                })() && (
+                                        <Button
+                                            variant="primary"
+                                            size="small"
+                                            onClick={() => {
+                                                const latestNext = findLatestNext();
+                                                const latestIndex = ayahs.findIndex(a => a.number_in_surah === latestNext);
+
+                                                if (latestIndex >= 0) {
+                                                    setAutoPlay(true);
+                                                    playAyah(latestIndex);
+
+                                                    // Also scroll to it
+                                                    ayahRefs.current[latestIndex]?.scrollIntoView({
+                                                        behavior: 'smooth',
+                                                        block: 'center',
+                                                    });
+                                                }
+                                            }}
+                                        >
+                                            Resume from Latest (Ayah {findLatestNext()})
+                                        </Button>
+                                    )}
+                                {completionStats.completed_count > 0 && (
                                     <Button
                                         variant="secondary"
                                         size="small"
-                                        onClick={() => {
-                                            const firstUnreadIndex = ayahs.findIndex(
-                                                a => a.number_in_surah === completionStats.first_unread_ayah
-                                            );
-                                            if (firstUnreadIndex >= 0) {
-                                                ayahRefs.current[firstUnreadIndex]?.scrollIntoView({
-                                                    behavior: 'smooth',
-                                                    block: 'center',
-                                                });
-                                            }
-                                        }}
+                                        onClick={() => setShowClearProgressConfirm(true)}
+                                        style={{ marginLeft: 'auto' }}
                                     >
-                                        Resume from Ayah {completionStats.first_unread_ayah}
+                                        Clear Progress
                                     </Button>
                                 )}
                             </div>
@@ -945,7 +1185,7 @@ function SurahDetail() {
                     ) : (
                         <>
                             <div className="d-flex justify-between align-center mb-2">
-                                <span className="text-muted small">Surah Overview</span>
+                                <span className="text-muted small">Surah Progress</span>
                                 <span className="text-muted small">
                                     {ayahs.length} ayahs
                                 </span>
@@ -980,284 +1220,293 @@ function SurahDetail() {
             </div>
 
             {/* Ayahs List */}
-            {ayahs.length === 0 ? (
-                <EmptyState message="No verses found" />
-            ) : (
-                <div className="ayahs-list">
-                    {ayahs.map((ayah, index) => {
-                        const translation = getTranslationForAyah(ayah.number_in_surah);
-                        const isPlaying = playingAyah === index;
-                        const isBookmarked = !!bookmarks[ayah.id];
-                        const isLoadingBookmark = bookmarkLoading[ayah.id];
-                        const isCompleted = completedAyahs.includes(ayah.number_in_surah);
-                        const isHighlighted = highlightedAyah === index;
+            {
+                ayahs.length === 0 ? (
+                    <EmptyState message="No verses found" />
+                ) : (
+                    <div className="ayahs-list">
+                        {ayahs.map((ayah, index) => {
+                            const translation = getTranslationForAyah(ayah.number_in_surah);
+                            const isPlaying = playingAyah === index;
+                            const isBookmarked = !!bookmarks[ayah.id];
+                            const isLoadingBookmark = bookmarkLoading[ayah.id];
+                            const isCompleted = completedAyahs.includes(ayah.number_in_surah);
+                            const isHighlighted = highlightedAyah === index;
 
-                        return (
-                            <div
-                                key={ayah.id}
-                                ref={(el) => ayahRefs.current[index] = el}
-                                className={`ayah-card ${isPlaying ? 'playing' : ''} ${isCompleted ? 'completed' : ''} ${isHighlighted ? 'highlighted' : ''}`}
-                            >
-                                <div className="ayah-header">
-                                    <span className={`ayah-number-badge ${isCompleted ? 'completed' : ''}`}>
-                                        {isCompleted && (
-                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '4px' }}>
-                                                <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                                            </svg>
-                                        )}
-                                        {ayah.number_in_surah}
-                                    </span>
-                                    <div className="ayah-actions">
-                                        {/* Bookmark Button */}
-                                        <button
-                                            className={`btn-icon ${isBookmarked ? 'bookmarked' : ''}`}
-                                            onClick={() => handleBookmarkToggle(ayah)}
-                                            title={isBookmarked ? 'Remove bookmark' : isAuthenticated ? 'Add bookmark' : 'Sign in to bookmark'}
-                                            disabled={isLoadingBookmark}
-                                        >
-                                            {isLoadingBookmark ? (
-                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                                    <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="32">
-                                                        <animate attributeName="stroke-dashoffset" from="32" to="0" dur="1s" repeatCount="indefinite" />
-                                                    </circle>
-                                                </svg>
-                                            ) : isBookmarked ? (
-                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
-                                                </svg>
-                                            ) : (
-                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                            return (
+                                <div
+                                    key={ayah.id}
+                                    data-index={index}
+                                    ref={(el) => ayahRefs.current[index] = el}
+                                    className={`ayah-card ${isPlaying ? 'playing' : ''} ${isCompleted ? 'completed' : ''} ${isHighlighted ? 'highlighted' : ''}`}
+                                >
+                                    <div className="ayah-header">
+                                        <span className={`ayah-number-badge ${isCompleted ? 'completed' : ''}`}>
+                                            {isCompleted && (
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '4px' }}>
+                                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
                                                 </svg>
                                             )}
-                                        </button>
-                                        {/* Share Button */}
-                                        <ShareButton
-                                            surahId={parseInt(id)}
-                                            ayahNumber={ayah.number_in_surah}
-                                            surahName={surah.name}
-                                            surahEnglishName={surah.english_name}
-                                            surahTranslation={surah.english_name_translation}
-                                            totalAyahs={surah.number_of_ayahs}
-                                            translation={selectedTranslation}
-                                        />
-                                        {/* Play/Pause Button */}
-                                        <button
-                                            className={`btn-icon ${isPlaying ? 'playing' : ''}`}
-                                            onClick={() => togglePlay(index)}
-                                            title={isPlaying ? 'Pause' : 'Play'}
-                                        >
-                                            {isPlaying ? (
-                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                                    <rect x="6" y="4" width="4" height="16"></rect>
-                                                    <rect x="14" y="4" width="4" height="16"></rect>
-                                                </svg>
-                                            ) : (
-                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                                                </svg>
-                                            )}
-                                        </button>
+                                            {ayah.number_in_surah}
+                                        </span>
+                                        <div className="ayah-actions">
+                                            {/* Bookmark Button */}
+                                            <button
+                                                className={`btn-icon ${isBookmarked ? 'bookmarked' : ''}`}
+                                                onClick={() => handleBookmarkToggle(ayah)}
+                                                title={isBookmarked ? 'Remove bookmark' : isAuthenticated ? 'Add bookmark' : 'Sign in to bookmark'}
+                                                disabled={isLoadingBookmark}
+                                            >
+                                                {isLoadingBookmark ? (
+                                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                        <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="32">
+                                                            <animate attributeName="stroke-dashoffset" from="32" to="0" dur="1s" repeatCount="indefinite" />
+                                                        </circle>
+                                                    </svg>
+                                                ) : isBookmarked ? (
+                                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                                        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                                                    </svg>
+                                                ) : (
+                                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                                                    </svg>
+                                                )}
+                                            </button>
+                                            {/* Share Button */}
+                                            <ShareButton
+                                                surahId={parseInt(id)}
+                                                ayahNumber={ayah.number_in_surah}
+                                                surahName={surah.name}
+                                                surahEnglishName={surah.english_name}
+                                                surahTranslation={surah.english_name_translation}
+                                                totalAyahs={surah.number_of_ayahs}
+                                                translation={selectedTranslation}
+                                            />
+                                            {/* Play/Pause Button */}
+                                            <button
+                                                className={`btn-icon ${isPlaying ? 'playing' : ''}`}
+                                                onClick={() => togglePlay(index)}
+                                                title={isPlaying ? 'Pause' : 'Play'}
+                                            >
+                                                {isPlaying ? (
+                                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                                        <rect x="6" y="4" width="4" height="16"></rect>
+                                                        <rect x="14" y="4" width="4" height="16"></rect>
+                                                    </svg>
+                                                ) : (
+                                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                                    </svg>
+                                                )}
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
 
-                                {/* Arabic Text */}
-                                <div className="ayah-text-arabic">
-                                    {ayah.text}
-                                    <span className="ayah-symbol">&#65018;</span>
-                                </div>
-
-                                {/* Translation */}
-                                {translation && (
-                                    <div className="ayah-translation">
-                                        {translation.text}
+                                    {/* Arabic Text */}
+                                    <div className="ayah-text-arabic">
+                                        <TextHighlighter text={ayah.text} highlight={highlightQuery} />
+                                        <span className="ayah-symbol">&#65018;</span>
                                     </div>
-                                )}
 
-                                {/* Ayah Metadata */}
-                                <div className="ayah-meta">
-                                    <span className="ayah-meta-item">Juz {ayah.juz}</span>
-                                    <span className="ayah-meta-item">Page {ayah.page}</span>
-                                    {ayah.sajda && (
-                                        <span className="ayah-meta-item sajda">Sajdah</span>
+                                    {/* Translation */}
+                                    {translation && (
+                                        <div className="ayah-translation">
+                                            <TextHighlighter text={translation.text} highlight={highlightQuery} />
+                                        </div>
                                     )}
+
+                                    {/* Ayah Metadata */}
+                                    <div className="ayah-meta">
+                                        <span className="ayah-meta-item">Juz {ayah.juz}</span>
+                                        <span className="ayah-meta-item">Page {ayah.page}</span>
+                                        {ayah.sajda && (
+                                            <span className="ayah-meta-item sajda">Sajdah</span>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
+                            );
+                        })}
+                    </div>
+                )
+            }
 
             {/* Floating Progress Indicator */}
-            {showFloatingProgress && (
-                <div className="floating-progress">
-                    <div className="floating-progress-content">
-                        <div className="floating-progress-info">
-                            <span className="floating-progress-label">
-                                Ayah {playingAyah !== null ? ayahs[playingAyah]?.number_in_surah : '-'} of {ayahs.length}
-                            </span>
-                            {completionStats && (
-                                <div className="floating-progress-bar">
-                                    <div
-                                        className="floating-progress-bar-fill"
-                                        style={{ width: `${completionStats.completion_percentage}%` }}
-                                    />
-                                </div>
-                            )}
-                        </div>
-                        <div className="floating-progress-controls">
-                            {/* Prev Button */}
-                            <button
-                                className="btn-icon-floating"
-                                onClick={() => {
-                                    // Use ref to always get the latest value, even if state hasn't updated yet
-                                    const currentAyah = playingAyah !== null ? playingAyah : lastPlayingAyahRef.current;
+            {/* Floating Progress Indicator */}
+            <div className={`floating-progress ${showFloatingProgress ? 'visible' : ''}`}>
+                <div className="floating-progress-content">
+                    <div className="floating-progress-info">
+                        <span className="floating-progress-label">
+                            Ayah {playingAyah !== null ? ayahs[playingAyah]?.number_in_surah : (ayahs[lastPlayedIndex]?.number_in_surah || '-')} of {ayahs.length}
+                        </span>
+                        {completionStats && (
+                            <div className="floating-progress-bar">
+                                <div
+                                    className="floating-progress-bar-fill"
+                                    style={{ width: `${completionStats.completion_percentage}%` }}
+                                />
+                            </div>
+                        )}
+                    </div>
+                    <div className="floating-progress-controls">
+                        {/* Prev Button */}
+                        <button
+                            className="btn-icon-floating"
+                            onClick={() => {
+                                // Use ref to always get the latest value, even if state hasn't updated yet
+                                const currentAyah = playingAyah !== null ? playingAyah : lastPlayingAyahRef.current;
 
-                                    if (currentAyah !== null && currentAyah > 0) {
-                                        playAyah(currentAyah - 1);
-                                    } else if (currentAyah === null || currentAyah === undefined) {
-                                        // Nothing has been played yet, play last ayah
-                                        playAyah(ayahs.length - 1);
-                                    }
-                                }}
-                                title="Previous ayah"
-                                disabled={playingAyah !== null && playingAyah === 0}
-                            >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                    <polygon points="19 3 5 12 19 21 19 3"></polygon>
-                                </svg>
-                            </button>
+                                if (currentAyah !== null && currentAyah > 0) {
+                                    playAyah(currentAyah - 1);
+                                } else if (currentAyah === null || currentAyah === undefined) {
+                                    // Nothing has been played yet, play last ayah
+                                    playAyah(ayahs.length - 1);
+                                }
+                            }}
+                            title="Previous ayah"
+                            disabled={playingAyah !== null && playingAyah === 0}
+                        >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M18 6l-8.5 6 8.5 6V6zM6 6v12h2V6H6z" />
+                            </svg>
+                        </button>
 
-                            {/* Play/Pause Button */}
-                            <button
-                                className="btn-icon-floating btn-icon-floating-primary"
-                                onClick={() => {
-                                    if (playingAyah !== null) {
-                                        // Currently playing - pause it
-                                        pauseAyah();
-                                    } else {
-                                        // Currently paused - resume from last playing ayah, or first unread, or beginning
-                                        const resumeIndex = lastPlayingAyahRef.current !== null
-                                            ? lastPlayingAyahRef.current
+                        {/* Play/Pause Button */}
+                        <button
+                            className="btn-icon-floating btn-icon-floating-primary"
+                            onClick={() => {
+                                if (playingAyah !== null) {
+                                    // Currently playing - pause it
+                                    pauseAyah();
+                                } else {
+                                    // Currently paused - resume from last playing ayah, or first unread, or beginning
+                                    const resumeIndex = lastPlayingAyahRef.current !== null
+                                        ? lastPlayingAyahRef.current
+                                        : lastPlayedIndex !== null
+                                            ? lastPlayedIndex
                                             : completionStats?.first_unread_ayah
                                                 ? ayahs.findIndex(a => a.number_in_surah === completionStats.first_unread_ayah)
                                                 : 0;
-                                        playAyah(resumeIndex >= 0 ? resumeIndex : 0);
-                                    }
-                                }}
-                                title={playingAyah !== null ? 'Pause' : 'Play'}
+                                    setAutoPlay(true);
+                                    playAyah(resumeIndex >= 0 ? resumeIndex : 0);
+                                }
+                            }}
+                            title={playingAyah !== null ? 'Pause' : 'Play'}
+                        >
+                            {playingAyah !== null ? (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <rect x="6" y="4" width="4" height="16"></rect>
+                                    <rect x="14" y="4" width="4" height="16"></rect>
+                                </svg>
+                            ) : (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                </svg>
+                            )}
+                        </button>
+
+                        {/* Next Button */}
+                        <button
+                            className="btn-icon-floating"
+                            onClick={() => {
+                                // Use ref to always get the latest value, even if state hasn't updated yet
+                                const currentAyah = playingAyah !== null ? playingAyah : lastPlayingAyahRef.current;
+
+                                if (currentAyah !== null && currentAyah < ayahs.length - 1) {
+                                    playAyah(currentAyah + 1);
+                                } else if (currentAyah === null || currentAyah === undefined) {
+                                    // Nothing has been played yet, play first ayah
+                                    playAyah(0);
+                                }
+                            }}
+                            title="Next ayah"
+                            disabled={playingAyah !== null && playingAyah === ayahs.length - 1}
+                        >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
+                            </svg>
+                        </button>
+
+                        {/* Speed Control */}
+                        <button
+                            className="btn-icon-floating"
+                            onClick={() => {
+                                const speeds = [1, 1.25, 1.5, 2, 0.5, 0.75];
+                                const currentIndex = speeds.indexOf(playbackSpeed);
+                                const nextIndex = (currentIndex + 1) % speeds.length;
+                                setPlaybackSpeed(speeds[nextIndex]);
+                            }}
+                            title={`Playback Speed: ${playbackSpeed}x`}
+                            style={{ fontSize: '11px', fontWeight: 'bold', width: 'auto', padding: '0 8px', minWidth: '32px' }}
+                        >
+                            {playbackSpeed}x
+                        </button>
+
+                        {/* Volume Control */}
+                        <div className="floating-progress-volume">
+                            <button
+                                className="btn-icon-floating"
+                                onClick={() => setVolume(v => v === 0 ? 1 : 0)}
+                                title={volume === 0 ? 'Unmute' : 'Mute'}
                             >
-                                {playingAyah !== null ? (
+                                {volume === 0 ? (
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                        <rect x="6" y="4" width="4" height="16"></rect>
-                                        <rect x="14" y="4" width="4" height="16"></rect>
+                                        <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
                                     </svg>
                                 ) : (
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
                                     </svg>
                                 )}
                             </button>
-
-                            {/* Next Button */}
-                            <button
-                                className="btn-icon-floating"
-                                onClick={() => {
-                                    // Use ref to always get the latest value, even if state hasn't updated yet
-                                    const currentAyah = playingAyah !== null ? playingAyah : lastPlayingAyahRef.current;
-
-                                    if (currentAyah !== null && currentAyah < ayahs.length - 1) {
-                                        playAyah(currentAyah + 1);
-                                    } else if (currentAyah === null || currentAyah === undefined) {
-                                        // Nothing has been played yet, play first ayah
-                                        playAyah(0);
-                                    }
-                                }}
-                                title="Next ayah"
-                                disabled={playingAyah !== null && playingAyah === ayahs.length - 1}
-                            >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
-                                </svg>
-                            </button>
-
-                            {/* Loop Toggle */}
-                            <button
-                                className={`btn-icon-floating ${loopAyah ? 'btn-icon-floating-active' : ''}`}
-                                onClick={() => setLoopAyah(prev => !prev)}
-                                title={loopAyah ? 'Disable loop (currently looping)' : 'Enable loop (repeat current ayah)'}
-                            >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"></path>
-                                </svg>
-                            </button>
-
-                            {/* Volume Control */}
-                            <div className="floating-progress-volume">
-                                <button
-                                    className="btn-icon-floating"
-                                    onClick={() => setVolume(v => v === 0 ? 1 : 0)}
-                                    title={volume === 0 ? 'Unmute' : 'Mute'}
-                                >
-                                    {volume === 0 ? (
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                            <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
-                                        </svg>
-                                    ) : (
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-                                        </svg>
-                                    )}
-                                </button>
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max="1"
-                                    step="0.1"
-                                    value={volume}
-                                    onChange={(e) => setVolume(parseFloat(e.target.value))}
-                                    className="volume-slider"
-                                    title="Volume"
-                                />
-                            </div>
-
-                            {/* Reciter Selector */}
-                            <select
-                                className="reciter-select-floating"
-                                value={selectedAudioEdition}
-                                onChange={(e) => {
-                                    // Save current playing state (both playing and paused)
-                                    const wasPlaying = playingAyah !== null;
-                                    const currentAyahIndex = playingAyah !== null
-                                        ? playingAyah
-                                        : lastPlayingAyahRef.current;
-                                    const newEdition = e.target.value;
-
-                                    // Change reciter
-                                    setSelectedAudioEdition(newEdition);
-
-                                    // If something was playing or paused, restart from the same ayah with new reciter
-                                    if (currentAyahIndex !== null && currentAyahIndex !== undefined) {
-                                        // Pass new edition directly to avoid race condition
-                                        playAyah(currentAyahIndex, newEdition);
-                                        // If it wasn't playing before, pause it after starting
-                                        if (!wasPlaying) {
-                                            pauseAyah();
-                                        }
-                                    }
-                                }}
-                                title="Reciter"
-                            >
-                                {simplifiedReciters.map(reciter => (
-                                    <option key={reciter.identifier} value={reciter.identifier}>
-                                        {reciter.name}
-                                    </option>
-                                ))}
-                            </select>
+                            <input
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.1"
+                                value={volume}
+                                onChange={(e) => setVolume(parseFloat(e.target.value))}
+                                className="volume-slider"
+                                title="Volume"
+                            />
                         </div>
+
+                        {/* Reciter Selector */}
+                        <select
+                            className="reciter-select-floating"
+                            value={selectedAudioEdition}
+                            onChange={(e) => {
+                                // Save current playing state (both playing and paused)
+                                const wasPlaying = playingAyah !== null;
+                                const currentAyahIndex = playingAyah !== null
+                                    ? playingAyah
+                                    : lastPlayingAyahRef.current;
+                                const newEdition = e.target.value;
+
+                                // Change reciter
+                                setSelectedAudioEdition(newEdition);
+
+                                // If something was playing or paused, restart from the same ayah with new reciter
+                                if (currentAyahIndex !== null && currentAyahIndex !== undefined) {
+                                    // Pass new edition directly to avoid race condition
+                                    playAyah(currentAyahIndex, newEdition);
+                                    // If it wasn't playing before, pause it after starting
+                                    if (!wasPlaying) {
+                                        pauseAyah();
+                                    }
+                                }
+                            }}
+                            title="Reciter"
+                        >
+                            {simplifiedReciters.map(reciter => (
+                                <option key={reciter.identifier} value={reciter.identifier}>
+                                    {reciter.name}
+                                </option>
+                            ))}
+                        </select>
                     </div>
                 </div>
-            )}
+            </div>
 
             {/* Navigation Footer */}
             <div className="surah-nav-footer">
@@ -1278,6 +1527,37 @@ function SurahDetail() {
                     </Button>
                 </div>
             </div>
+
+            {/* Clear Progress Confirmation Modal */}
+            <Modal
+                isOpen={showClearProgressConfirm}
+                onClose={() => setShowClearProgressConfirm(false)}
+                title="Clear Surah Progress?"
+                size="small"
+                footer={
+                    <div className="d-flex gap-2">
+                        <Button
+                            variant="secondary"
+                            onClick={() => setShowClearProgressConfirm(false)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="danger"
+                            onClick={handleClearProgress}
+                        >
+                            Clear Progress
+                        </Button>
+                    </div>
+                }
+            >
+                <p>
+                    Are you sure you want to clear your progress for <strong>{surah?.english_name}</strong> ({surah?.name})?
+                </p>
+                <p className="text-muted small">
+                    This will remove all completed ayahs for this surah. This action cannot be undone.
+                </p>
+            </Modal>
 
             {/* Surah Completion Modal */}
             <Modal

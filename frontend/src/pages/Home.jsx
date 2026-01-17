@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Card } from '../components/Card';
+import { Timeline } from '../components/Timeline';
 import { useAuth } from '../contexts/AuthContext';
 
 /**
@@ -77,21 +78,9 @@ function Home() {
                 </div>
             </section>
 
-            {/* Features Section */}
+            {/* Features Timeline */}
             <section className="features-section">
-                <div className="section-header">
-                    <h2 className="section-title">Features</h2>
-                    <p className="section-subtitle">Everything you need for a meaningful reading experience</p>
-                </div>
-                <div className="features-grid">
-                    {features.map((feature, index) => (
-                        <Card key={index} className="feature-card">
-                            <div className="feature-icon">{feature.icon}</div>
-                            <h3 className="feature-title">{feature.title}</h3>
-                            <p className="feature-description">{feature.description}</p>
-                        </Card>
-                    ))}
-                </div>
+                <Timeline data={features} />
             </section>
 
             {/* How to Use Section */}
@@ -150,6 +139,9 @@ function Home() {
                 <Card className="cta-card">
                     <h2>Ready to Start Reading?</h2>
                     <p>Dive into the Quran with a beautiful, distraction-free reading experience.</p>
+                    <p style={{ fontSize: '0.875rem', opacity: 0.85, marginBottom: '24px' }}>
+                        🔒 No tracking. No ads. Ever. Accounts are only used to save your reading progress.
+                    </p>
                     <Link to="/quran" className="btn btn-primary btn-large">
                         Browse Quran
                     </Link>

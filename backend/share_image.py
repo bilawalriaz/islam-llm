@@ -733,3 +733,282 @@ def generate_og_image_bytes(format="png"):
     buffer.seek(0)
     return buffer.getvalue()
 
+
+def generate_share_profile_image_bytes(
+    user_name,
+    completion_percentage,
+    streak,
+    total_ayahs,
+    theme="classic",
+    format="png"
+):
+    """Generate a share profile image for social media previews.
+
+    Creates a beautiful image showing user's Quran reading progress.
+    Dimensions: 1200x630 (Open Graph standard)
+    """
+    # OG image dimensions
+    width = 1200
+    height = 630
+
+    # Color RGB values
+    text_primary_rgb = hex_to_rgb(COLORS['text_primary'])
+    text_secondary_rgb = hex_to_rgb(COLORS['text_secondary'])
+    accent_rgb = hex_to_rgb(COLORS['accent'])
+
+    # Create the image
+    img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    # Background and colors based on theme
+    if theme == "dark":
+        # Dark slate background
+        bg_dark_rgb = hex_to_rgb(COLORS['bg_dark'])
+        for y in range(height):
+            draw.line([(0, y), (width, y)], fill=(*bg_dark_rgb, 255))
+        text_color = (255, 255, 255)
+        secondary_color = (200, 200, 200)
+        accent_color = accent_rgb
+        bg_rect_color = (30, 41, 59, 180)
+    elif theme == "nature":
+        # Nature background
+        bg = get_unsplash_image(width, height)
+        img.paste(bg, (0, 0))
+        # Darken overlay
+        overlay = Image.new('RGBA', (width, height), (0, 0, 0, 120))
+        img = Image.alpha_composite(img, overlay)
+        draw = ImageDraw.Draw(img)
+        text_color = (255, 255, 255)
+        secondary_color = (220, 220, 220)
+        accent_color = (251, 191, 36)  # Gold/yellow for nature
+        bg_rect_color = (15, 23, 42, 150)
+    elif theme == "minimal":
+        # Clean light gray background
+        for y in range(height):
+            draw.line([(0, y), (width, y)], fill=(250, 250, 249, 255))
+        text_color = text_primary_rgb
+        secondary_color = text_secondary_rgb
+        accent_color = accent_rgb
+        bg_rect_color = (255, 255, 255, 255)
+    else:  # classic
+        # Warm orange gradient
+        gradient_start_rgb = hex_to_rgb(COLORS['gradient_start'])
+        gradient_end_rgb = hex_to_rgb(COLORS['gradient_end'])
+        for y in range(height):
+            ratio = y / height
+            r = int(gradient_start_rgb[0] + (gradient_end_rgb[0] - gradient_start_rgb[0]) * ratio)
+            g = int(gradient_start_rgb[1] + (gradient_end_rgb[1] - gradient_start_rgb[1]) * ratio)
+            b = int(gradient_start_rgb[2] + (gradient_end_rgb[2] - gradient_start_rgb[2]) * ratio)
+            draw.line([(0, y), (width, y)], fill=(r, g, b, 255))
+        text_color = text_primary_rgb
+        secondary_color = text_secondary_rgb
+        accent_color = accent_rgb
+        bg_rect_color = (255, 255, 255, 230)
+
+    # Draw header card
+    margin_x = 80
+    card_margin_y = 60
+    card_height = 140
+    card_width = width - 2 * margin_x
+
+    # Rounded rectangle for header
+    if theme == "minimal":
+        draw.rounded_rectangle(
+            [(margin_x, card_margin_y), (margin_x + card_width, card_margin_y + card_height)],
+            radius=20,
+            outline=(200, 200, 200, 100),
+            width=2
+        )
+    else:
+        # Fill background for header card
+        header_bg = Image.new('RGBA', (card_width, card_height), (*bg_rect_color[:3], bg_rect_color[3] if len(bg_rect_color) > 3 else 255))
+        header_mask = Image.new('L', (card_width, card_height), 0)
+        header_mask_draw = ImageDraw.Draw(header_mask)
+        header_mask_draw.rounded_rectangle([(0, 0), (card_width - 1, card_height - 1)], radius=20, fill=255)
+        header_bg.putalpha(header_mask)
+        img.paste(header_bg, (margin_x, card_margin_y), header_bg)
+        draw = ImageDraw.Draw(img)
+
+        # Border for non-minimal themes
+        border_color = (255, 255, 255, 50) if theme == "nature" else (200, 200, 200, 100)
+        draw.rounded_rectangle(
+            [(margin_x, card_margin_y), (margin_x + card_width, card_margin_y + card_height)],
+            radius=20,
+            outline=border_color,
+            width=1
+        )
+
+    # Draw user name
+    name_font = get_font(36)
+    name_text = user_name or "Quran Reader"
+    name_y = card_margin_y + 35
+    draw.text(
+        (margin_x + 30, name_y),
+        name_text,
+        fill=text_color,
+        font=name_font
+    )
+
+    # Draw "Quran Journey" subtitle
+    subtitle_font = get_font(20)
+    subtitle_text = "Quran Journey"
+    draw.text(
+        (margin_x + 30, name_y + 45),
+        subtitle_text,
+        fill=secondary_color,
+        font=subtitle_font
+    )
+
+    # Draw completion percentage badge (right side)
+    pct_font = get_font(48)
+    pct_text = f"{completion_percentage}%"
+    pct_bbox = draw.textbbox((0, 0), pct_text, font=pct_font)
+    pct_width = pct_bbox[2] - pct_bbox[0]
+
+    # Badge background
+    badge_x = margin_x + card_width - 180
+    badge_y = card_margin_y + 30
+    badge_width = 150
+    badge_height = 80
+
+    if theme == "minimal":
+        draw.rounded_rectangle(
+            [(badge_x, badge_y), (badge_x + badge_width, badge_y + badge_height)],
+            radius=16,
+            fill=(*accent_color, 30)
+        )
+    else:
+        draw.rounded_rectangle(
+            [(badge_x, badge_y), (badge_x + badge_width, badge_y + badge_height)],
+            radius=16,
+            fill=(*accent_color, 255)
+        )
+
+    # Percentage text
+    pct_color = (255, 255, 255) if theme != "minimal" else accent_color
+    pct_x = badge_x + (badge_width - pct_width) // 2
+    draw.text(
+        (pct_x, badge_y + 12),
+        pct_text,
+        fill=pct_color,
+        font=pct_font
+    )
+
+    # "Complete" label
+    label_font = get_font(14)
+    label_text = "Complete"
+    label_bbox = draw.textbbox((0, 0), label_text, font=label_font)
+    label_width = label_bbox[2] - label_bbox[0]
+    label_x = badge_x + (badge_width - label_width) // 2
+    draw.text(
+        (label_x, badge_y + 62),
+        label_text,
+        fill=(255, 255, 255, 200) if theme != "minimal" else secondary_color,
+        font=label_font
+    )
+
+    # Stats row - below header card
+    stats_y = card_margin_y + card_height + 60
+    stats_spacing = 280
+    stats_x = margin_x + 60
+
+    # Stat 1: Total Ayahs
+    stat_label_font = get_font(16)
+    stat_value_font = get_font(42)
+
+    # Ayahs read
+    ayah_label = "Ayahs Read"
+    ayah_value = str(total_ayahs)
+    ayah_label_bbox = draw.textbbox((0, 0), ayah_label, font=stat_label_font)
+    ayah_label_width = ayah_label_bbox[2] - ayah_label_bbox[0]
+    draw.text(
+        (stats_x - ayah_label_width // 2, stats_y + 55),
+        ayah_label,
+        fill=secondary_color,
+        font=stat_label_font
+    )
+    ayah_value_bbox = draw.textbbox((0, 0), ayah_value, font=stat_value_font)
+    ayah_value_width = ayah_value_bbox[2] - ayah_value_bbox[0]
+    draw.text(
+        (stats_x - ayah_value_width // 2, stats_y),
+        ayah_value,
+        fill=text_color,
+        font=stat_value_font
+    )
+
+    # Stat 2: Streak (with fire emoji representation)
+    streak_x = stats_x + stats_spacing
+    streak_label = "Day Streak"
+    streak_value = str(streak)
+    streak_label_bbox = draw.textbbox((0, 0), streak_label, font=stat_label_font)
+    streak_label_width = streak_label_bbox[2] - streak_label_bbox[0]
+    draw.text(
+        (streak_x - streak_label_width // 2, stats_y + 55),
+        streak_label,
+        fill=secondary_color,
+        font=stat_label_font
+    )
+    streak_value_bbox = draw.textbbox((0, 0), streak_value, font=stat_value_font)
+    streak_value_width = streak_value_bbox[2] - streak_value_bbox[0]
+    draw.text(
+        (streak_x - streak_value_width // 2, stats_y),
+        streak_value,
+        fill=text_color,
+        font=stat_value_font
+    )
+
+    # Stat 3: Surahs completed (estimate)
+    surahs_x = stats_x + stats_spacing * 2
+    surahs_completed = int((completion_percentage / 100) * 114)  # Approximate
+    surah_label = "Surahs"
+    surah_value = f"{surahs_completed}/114"
+    surah_label_bbox = draw.textbbox((0, 0), surah_label, font=stat_label_font)
+    surah_label_width = surah_label_bbox[2] - surah_label_bbox[0]
+    draw.text(
+        (surahs_x - surah_label_width // 2, stats_y + 55),
+        surah_label,
+        fill=secondary_color,
+        font=stat_label_font
+    )
+    surah_value_bbox = draw.textbbox((0, 0), surah_value, font=stat_value_font)
+    surah_value_width = surah_value_bbox[2] - surah_value_bbox[0]
+    draw.text(
+        (surahs_x - surah_value_width // 2, stats_y),
+        surah_value,
+        fill=text_color,
+        font=stat_value_font
+    )
+
+    # Draw footer
+    footer_y = height - 50
+    footer_font = get_font(18)
+    footer_text = "Track your Quran journey at quran.hyperflash.uk"
+    footer_bbox = draw.textbbox((0, 0), footer_text, font=footer_font)
+    footer_width = footer_bbox[2] - footer_bbox[0]
+    footer_x = (width - footer_width) // 2
+
+    draw.text(
+        (footer_x, footer_y),
+        footer_text,
+        fill=(*secondary_color, 180) if isinstance(secondary_color, tuple) and len(secondary_color) == 3 else (*secondary_color[:3], 180) if len(secondary_color) > 3 else secondary_color,
+        font=footer_font
+    )
+
+    # Save to buffer
+    buffer = BytesIO()
+
+    if format.lower() == "jpg" or format.lower() == "jpeg":
+        rgb_img = Image.new('RGB', img.size, (250, 250, 250))
+        if img.mode == 'RGBA':
+            rgb_img.paste(img, mask=img.split()[3])
+        else:
+            rgb_img.paste(img)
+        rgb_img.save(buffer, format='JPEG', quality=95)
+    else:
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+        img.save(buffer, format='PNG', optimize=True)
+
+    buffer.seek(0)
+    return buffer.getvalue()
+

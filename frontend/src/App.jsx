@@ -3,12 +3,19 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
+import AuthCallback from './pages/AuthCallback'
 import Home from './pages/Home'
 import Account from './pages/Account'
-import Progress from './pages/Progress'
+import Journey from './pages/Journey'
 import Analytics from './pages/Analytics'
 import QuranHome from './pages/QuranHome'
 import SurahDetail from './pages/SurahDetail'
+import SearchPage from './pages/SearchPage'
+import SharedProfile from './pages/SharedProfile'
+import IslamicEventsPage from './pages/IslamicEventsPage'
+
 
 /**
  * ProtectedRoute - Wrapper that redirects to login if not authenticated
@@ -81,13 +88,34 @@ function AppRoutes() {
                     </PublicRoute>
                 }
             />
+            <Route
+                path="/forgot-password"
+                element={
+                    <PublicRoute>
+                        <ForgotPassword />
+                    </PublicRoute>
+                }
+            />
+            <Route
+                path="/reset-password"
+                element={
+                    <ResetPassword />
+                }
+            />
+            <Route path="/auth/callback" element={<AuthCallback />} />
 
             {/* Public routes - no authentication required */}
             <Route element={<Layout />}>
                 <Route index element={<Home />} />
                 <Route path="quran" element={<QuranHome />} />
                 <Route path="quran/:id" element={<SurahDetail />} />
+                <Route path="search" element={<SearchPage />} />
+                <Route path="events" element={<IslamicEventsPage />} />
+                <Route path="events/:eventId" element={<IslamicEventsPage />} />
             </Route>
+
+            {/* Public share profile route - no auth required, no layout */}
+            <Route path="/share/:shareId" element={<SharedProfile />} />
 
             {/* Protected routes - require authentication for account features */}
             <Route
@@ -102,16 +130,16 @@ function AppRoutes() {
                 {/* Add more protected account routes here (progress, bookmarks, etc.) */}
             </Route>
 
-            {/* Progress page - protected route */}
+            {/* Journey page - protected route */}
             <Route
-                path="/progress"
+                path="/journey"
                 element={
                     <ProtectedRoute>
                         <Layout />
                     </ProtectedRoute>
                 }
             >
-                <Route index element={<Progress />} />
+                <Route index element={<Journey />} />
             </Route>
 
             {/* Analytics page - protected route */}
@@ -125,6 +153,8 @@ function AppRoutes() {
             >
                 <Route index element={<Analytics />} />
             </Route>
+
+
 
             {/* Catch all - redirect to home */}
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,0 +1,17 @@
+# Exclude large audio files from build context
+quran-dump/audio/
+**/*.mp3
+**/*.wav
+
+# Exclude dependencies and cache
+**/node_modules/
+**/venv/
+**/__pycache__/
+**/.git/
+**/.claude/
+
+# Exclude logs and DB journals
+*.db-journal
+*.db-wal
+docker-compose.yml
+Dockerfile

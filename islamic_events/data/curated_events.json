@@ -1,0 +1,452 @@
+[
+  {
+    "id": "hijrah",
+    "title": "Hijrah (Migration to Medina)",
+    "hijri": {"year": 1, "month": 1, "day": 1},
+    "gregorian": {"year": 622, "month": 7, "day": 16},
+    "category": "milestone",
+    "tags": ["prophetic", "migration", "medinah"],
+    "description": "The migration of Prophet Muhammad and his followers from Mecca to Medina, marking the beginning of the Islamic calendar."
+  },
+  {
+    "id": "badr",
+    "title": "Battle of Badr",
+    "hijri": {"year": 2, "month": 9, "day": 17},
+    "gregorian": {"year": 624, "month": 3, "day": 13},
+    "category": "battle",
+    "tags": ["prophetic", "battle", "victory"],
+    "description": "First major battle in early Islamic history. Muslims achieved a decisive victory despite being outnumbered 3:1."
+  },
+  {
+    "id": "uhud",
+    "title": "Battle of Uhud",
+    "hijri": {"year": 3, "month": 3, "day": 15},
+    "gregorian": {"year": 625, "month": 3, "day": 23},
+    "category": "battle",
+    "tags": ["prophetic", "battle"],
+    "description": "Battle where Muslims learned valuable lessons about obedience to leadership. Initial success turned to setback."
+  },
+  {
+    "id": "trench",
+    "title": "Battle of the Trench (Khandaq)",
+    "hijri": {"year": 5, "month": 2, "day": 5},
+    "gregorian": {"year": 627, "month": 3, "day": 31},
+    "category": "battle",
+    "tags": ["prophetic", "battle", "innovation"],
+    "description": "Strategic battle where Salman al-Farsi suggested digging a trench, a new tactic in Arabian warfare."
+  },
+  {
+    "id": "hudaibiyah",
+    "title": "Treaty of Hudaybiyyah",
+    "hijri": {"year": 6, "month": 12, "day": 1},
+    "gregorian": {"year": 628, "month": 3, "day": 13},
+    "category": "treaty",
+    "tags": ["prophetic", "treaty", "diplomacy"],
+    "description": "Peace treaty that initially seemed unfavorable but led to greater understanding and eventual conquest of Mecca."
+  },
+  {
+    "id": "conquest-of-mecca",
+    "title": "Conquest of Mecca",
+    "hijri": {"year": 8, "month": 12, "day": 20},
+    "gregorian": {"year": 630, "month": 1, "day": 11},
+    "category": "milestone",
+    "tags": ["prophetic", "conquest", "mecca"],
+    "description": "Peaceful conquest of Mecca with minimal bloodshed. Idols in Kaaba were destroyed and the city was purified."
+  },
+  {
+    "id": "farewell-hajj",
+    "title": "Farewell Hajj (Hajjat al-Wada)",
+    "hijri": {"year": 10, "month": 12, "day": 9},
+    "gregorian": {"year": 632, "month": 3, "day": 7},
+    "category": "milestone",
+    "tags": ["prophetic", "hajj"],
+    "description": "Prophet Muhammad's final pilgrimage where he delivered his famous farewell sermon emphasizing equality and justice."
+  },
+  {
+    "id": "prophets-death",
+    "title": "Death of Prophet Muhammad",
+    "hijri": {"year": 11, "month": 12, "day": 12},
+    "gregorian": {"year": 632, "month": 6, "day": 8},
+    "category": "death",
+    "tags": ["prophetic", "medinah"],
+    "description": "The Prophet passed away in Medina at age 63. Abu Bakr was elected as the first Caliph."
+  },
+  {
+    "id": "abu-bakr-caliph",
+    "title": "Abu Bakr becomes First Caliph",
+    "hijri": {"year": 11, "month": 12, "day": 12},
+    "gregorian": {"year": 632, "month": 6, "day": 8},
+    "category": "milestone",
+    "tags": ["rashidun", "caliph"],
+    "description": "Abu Bakr was elected as the first Caliph of Islam, uniting the community after the Prophet's death."
+  },
+  {
+    "id": "umar-caliph",
+    "title": "Umar becomes Second Caliph",
+    "hijri": {"year": 13, "month": 8, "day": 27},
+    "gregorian": {"year": 634, "month": 11, "day": 6},
+    "category": "milestone",
+    "tags": ["rashidun", "caliph"],
+    "description": "Umar ibn al-Khattab became the second Caliph. Under his rule, the Islamic empire expanded significantly."
+  },
+  {
+    "id": "jerusalem-conquest",
+    "title": "Conquest of Jerusalem",
+    "hijri": {"year": 15, "month": 11, "day": 20},
+    "gregorian": {"year": 637, "month": 4, "day": 6},
+    "category": "milestone",
+    "tags": ["rashidun", "conquest", "jerusalem"],
+    "description": "Jerusalem was peacefully surrendered to Caliph Umar. He guaranteed protection for all inhabitants."
+  },
+  {
+    "id": "umar-martyred",
+    "title": "Umar is Assassinated",
+    "hijri": {"year": 23, "month": 12, "day": 26},
+    "gregorian": {"year": 644, "month": 11, "day": 4},
+    "category": "death",
+    "tags": ["rashidun", "caliph", "martyr"],
+    "description": "Caliph Umar was assassinated by a Persian slave during prayer. Uthman was chosen as successor."
+  },
+  {
+    "id": "uthman-caliph",
+    "title": "Uthman becomes Third Caliph",
+    "hijri": {"year": 23, "month": 12, "day": 26},
+    "gregorian": {"year": 644, "month": 11, "day": 4},
+    "category": "milestone",
+    "tags": ["rashidun", "caliph"],
+    "description": "Uthman ibn Affan became the third Caliph. During his rule, the Quran was compiled into a standard text."
+  },
+  {
+    "id": "quran-compilation",
+    "title": "Standard Quran Compilation Completed",
+    "hijri": {"year": 25, "month": 12, "day": 1},
+    "gregorian": {"year": 646, "month": 11, "day": 5},
+    "category": "milestone",
+    "tags": ["rashidun", "quran"],
+    "description": "Under Uthman's direction, the Quran was compiled into a single standard text and copies were sent to major cities."
+  },
+  {
+    "id": "uthman-martyred",
+    "title": "Uthman is Assassinated",
+    "hijri": {"year": 35, "month": 12, "day": 18},
+    "gregorian": {"year": 656, "month": 6, "day": 17},
+    "category": "death",
+    "tags": ["rashidun", "caliph", "martyr"],
+    "description": "Caliph Uthman was assassinated by rebels. Ali was chosen as the fourth Caliph, leading to the First Fitna (civil war)."
+  },
+  {
+    "id": "ali-caliph",
+    "title": "Ali becomes Fourth Caliph",
+    "hijri": {"year": 35, "month": 12, "day": 18},
+    "gregorian": {"year": 656, "month": 6, "day": 17},
+    "category": "milestone",
+    "tags": ["rashidun", "caliph"],
+    "description": "Ali ibn Abi Talib became the fourth Caliph. His rule was marked by civil wars (First Fitna)."
+  },
+  {
+    "id": "camel-battle",
+    "title": "Battle of the Camel",
+    "hijri": {"year": 36, "month": 2, "day": 10},
+    "gregorian": {"year": 656, "month": 12, "day": 4},
+    "category": "battle",
+    "tags": ["rashidun", "battle", "civil-war"],
+    "description": "First major battle of the First Fitna between forces of Ali and Aisha, Talha, and Zubayr."
+  },
+  {
+    "id": "siffin-battle",
+    "title": "Battle of Siffin",
+    "hijri": {"year": 37, "month": 1, "day": 10},
+    "gregorian": {"year": 657, "month": 7, "day": 26},
+    "category": "battle",
+    "tags": ["rashidun", "battle", "civil-war"],
+    "description": "Battle between Ali and Muawiyah I. Led to the establishment of the Umayyad Caliphate."
+  },
+  {
+    "id": "ali-martyred",
+    "title": "Ali is Assassinated",
+    "hijri": {"year": 40, "month": 12, "day": 17},
+    "gregorian": {"year": 661, "month": 1, "day": 28},
+    "category": "death",
+    "tags": ["rashidun", "caliph", "martyr"],
+    "description": "Caliph Ali was assassinated by a Kharijite during prayer in Kufa. End of the Rashidun Caliphate period."
+  },
+  {
+    "id": "hasan-caliph",
+    "title": "Hasan ibn Ali becomes Caliph",
+    "hijri": {"year": 40, "month": 12, "day": 17},
+    "gregorian": {"year": 661, "month": 1, "day": 28},
+    "category": "milestone",
+    "tags": ["rashidun", "caliph"],
+    "description": "Hasan ibn Ali briefly served as Caliph before abdicating to Muawiyah I, ending the First Fitna."
+  },
+  {
+    "id": "umayyad-start",
+    "title": "Umayyad Caliphate Established",
+    "hijri": {"year": 41, "month": 7, "day": 1},
+    "gregorian": {"year": 661, "month": 8, "day": 1},
+    "category": "milestone",
+    "tags": ["umayyad", "caliph"],
+    "description": "Muawiyah I established the Umayyad Caliphate with its capital in Damascus."
+  },
+  {
+    "id": "karbala",
+    "title": "Battle of Karbala",
+    "hijri": {"year": 61, "month": 10, "day": 10},
+    "gregorian": {"year": 680, "month": 10, "day": 10},
+    "category": "battle",
+    "tags": ["tragedy", "hussein", "ashura"],
+    "description": "Hussein ibn Ali, grandson of the Prophet, was martyred at Karbala by Umayyad forces. A pivotal event in Shia Islam."
+  },
+  {
+    "id": "abdul-malik",
+    "title": "Abd al-Malik becomes Caliph",
+    "hijri": {"year": 65, "month": 9, "day": 1},
+    "gregorian": {"year": 685, "month": 6, "day": 14},
+    "category": "milestone",
+    "tags": ["umayyad", "caliph"],
+    "description": "Abd al-Malik ibn Marwan became Caliph. He centralized administration and Arabicized the government."
+  },
+  {
+    "id": "dome-of-rock",
+    "title": "Dome of the Rock Completed",
+    "hijri": {"year": 72, "month": 6, "day": 1},
+    "gregorian": {"year": 691, "month": 9, "day": 24},
+    "category": "milestone",
+    "tags": ["umayyad", "jerusalem", "architecture"],
+    "description": "Construction of the Dome of the Rock in Jerusalem was completed under Abd al-Malik."
+  },
+  {
+    "id": "umayyad-fall",
+    "title": "Fall of the Umayyad Caliphate",
+    "hijri": {"year": 132, "month": 4, "day": 1},
+    "gregorian": {"year": 750, "month": 1, "day": 25},
+    "category": "milestone",
+    "tags": ["umayyad", "abbasid", "revolution"],
+    "description": "The Abbasid Revolution overthrew the Umayyad Caliphate. Most Umayyad family members were killed."
+  },
+  {
+    "id": "abbasid-start",
+    "title": "Abbasid Caliphate Established",
+    "hijri": {"year": 132, "month": 4, "day": 1},
+    "gregorian": {"year": 750, "month": 1, "day": 25},
+    "category": "milestone",
+    "tags": ["abbasid", "caliph"],
+    "description": "The Abbasid Caliphate was established with Abu al-Abbas as-Saffah as the first Caliph."
+  },
+  {
+    "id": "baghdad-founded",
+    "title": "Baghdad Founded",
+    "hijri": {"year": 145, "month": 10, "day": 1},
+    "gregorian": {"year": 762, "month": 7, "day": 30},
+    "category": "milestone",
+    "tags": ["abbasid", "baghdad"],
+    "description": "Caliph Al-Mansur founded Baghdad as the new capital of the Abbasid Caliphate."
+  },
+  {
+    "id": "harun-al-rashid",
+    "title": "Harun al-Rashid becomes Caliph",
+    "hijri": {"year": 170, "month": 9, "day": 1},
+    "gregorian": {"year": 786, "month": 9, "day": 14},
+    "category": "milestone",
+    "tags": ["abbasid", "caliph", "golden-age"],
+    "description": "Harun al-Rashid became Caliph. His rule is considered the peak of the Islamic Golden Age."
+  },
+  {
+    "id": "house-of-wisdom",
+    "title": "Bayt al-Hikmah (House of Wisdom) Established",
+    "hijri": {"year": 198, "month": 1, "day": 1},
+    "gregorian": {"year": 813, "month": 9, "day": 18},
+    "category": "milestone",
+    "tags": ["abbasid", "knowledge", "translation"],
+    "description": "Caliph Al-Ma'mun established the House of Wisdom in Baghdad, becoming a center of translation and research."
+  },
+  {
+    "id": "al-khwarizmi",
+    "title": "Al-Khwarizmi publishes Algebra",
+    "hijri": {"year": 212, "month": 1, "day": 1},
+    "gregorian": {"year": 827, "month": 1, "day": 1},
+    "category": "milestone",
+    "tags": ["abbasid", "science", "mathematics"],
+    "description": "Muhammad ibn Musa al-Khwarizmi published his work on algebra, founding the field."
+  },
+  {
+    "id": "abbasid-decline",
+    "title": "Abbasid Caliphate Begins Decline",
+    "hijri": {"year": 232, "month": 1, "day": 1},
+    "gregorian": {"year": 846, "month": 9, "day": 11},
+    "category": "milestone",
+    "tags": ["abbasid", "decline"],
+    "description": "The Abbasid Caliphate began its decline with increasing regional independence and Turkic military influence."
+  },
+  {
+    "id": "fatimid-rise",
+    "title": "Fatimid Caliphate Established",
+    "hijri": {"year": 297, "month": 1, "day": 1},
+    "gregorian": {"year": 909, "month": 1, "day": 4},
+    "category": "milestone",
+    "tags": ["fatimid", "caliph", "shia"],
+    "description": "The Fatimid Caliphate was established in North Africa with Shia Ismaili doctrine."
+  },
+  {
+    "id": "cairo-founded",
+    "title": "Cairo Founded",
+    "hijri": {"year": 358, "month": 1, "day": 1},
+    "gregorian": {"year": 969, "month": 7, "day": 6},
+    "category": "milestone",
+    "tags": ["fatimid", "cairo"],
+    "description": "The Fatimids founded Cairo as their capital."
+  },
+  {
+    "id": "al-azhar",
+    "title": "Al-Azhar University Founded",
+    "hijri": {"year": 359, "month": 10, "day": 1},
+    "gregorian": {"year": 970, "month": 10, "day": 1},
+    "category": "milestone",
+    "tags": ["fatimid", "education", "al-azhar"],
+    "description": "Al-Azhar Mosque and University was founded in Cairo, becoming one of the oldest universities in the world."
+  },
+  {
+    "id": "mamluk-rise",
+    "title": "Mamluk Sultanate Established",
+    "hijri": {"year": 648, "month": 6, "day": 1},
+    "gregorian": {"year": 1250, "month": 10, "day": 10},
+    "category": "milestone",
+    "tags": ["mamluk", "egypt"],
+    "description": "The Mamluk Sultanate was established in Egypt after overthrowing the Ayyubid dynasty."
+  },
+  {
+    "id": "baghdad-sacked",
+    "title": "Mongol Siege of Baghdad",
+    "hijri": {"year": 656, "month": 2, "day": 1},
+    "gregorian": {"year": 1258, "month": 2, "day": 10},
+    "category": "milestone",
+    "tags": ["abbasid", "mongol", "tragedy"],
+    "description": "Mongols under Hulagu Khan sacked Baghdad, ending the Abbasid Caliphate. Massive loss of knowledge and culture."
+  },
+  {
+    "id": "ottoman-start",
+    "title": "Ottoman State Founded",
+    "hijri": {"year": 699, "month": 5, "day": 1},
+    "gregorian": {"year": 1299, "month": 3, "day": 1},
+    "category": "milestone",
+    "tags": ["ottoman", "turkey"],
+    "description": "Osman I founded the Ottoman Beylik, which would become the Ottoman Empire."
+  },
+  {
+    "id": "constantinople-fall",
+    "title": "Fall of Constantinople",
+    "hijri": {"year": 857, "month": 5, "day": 20},
+    "gregorian": {"year": 1453, "month": 5, "day": 29},
+    "category": "milestone",
+    "tags": ["ottoman", "conquest", "constantinople"],
+    "description": "Mehmed II conquered Constantinople, renaming it Istanbul. End of the Byzantine Empire."
+  },
+  {
+    "id": "mughal-start",
+    "title": "Mughal Empire Founded",
+    "hijri": {"year": 932, "month": 6, "day": 1},
+    "gregorian": {"year": 1526, "month": 4, "day": 21},
+    "category": "milestone",
+    "tags": ["mughal", "india"],
+    "description": "Babur founded the Mughal Empire in India after the First Battle of Panipat."
+  },
+  {
+    "id": "ottoman-peak",
+    "title": "Ottoman Empire at Peak under Suleiman",
+    "hijri": {"year": 926, "month": 9, "day": 1},
+    "gregorian": {"year": 1520, "month": 9, "day": 22},
+    "category": "milestone",
+    "tags": ["ottoman", "golden-age"],
+    "description": "Suleiman the Magnificent became Sultan. The Ottoman Empire reached its zenith."
+  },
+  {
+    "id": "abd-al-wahhab",
+    "title": "Muhammad ibn Abd al-Wahhab Born",
+    "hijri": {"year": 1115, "month": 1, "day": 1},
+    "gregorian": {"year": 1703, "month": 1, "day": 1},
+    "category": "birth",
+    "tags": ["scholar", "wahhabi"],
+    "description": "Birth of Muhammad ibn Abd al-Wahhab, founder of the Wahhabi movement."
+  },
+  {
+    "id": "wahhab-alliance",
+    "title": "Wahhabi-Saudi Alliance",
+    "hijri": {"year": 1157, "month": 1, "day": 1},
+    "gregorian": {"year": 1744, "month": 1, "day": 1},
+    "category": "milestone",
+    "tags": ["saudi", "wahhabi", "alliance"],
+    "description": "Muhammad ibn Saud and Muhammad ibn Abd al-Wahhab formed an alliance, founding the First Saudi State."
+  },
+  {
+    "id": "ottoman-fall",
+    "title": "Ottoman Caliphate Abolished",
+    "hijri": {"year": 1342, "month": 6, "day": 1},
+    "gregorian": {"year": 1924, "month": 3, "day": 3},
+    "category": "milestone",
+    "tags": ["ottoman", "caliph", "abolition"],
+    "description": "The Turkish Grand National Assembly abolished the Ottoman Caliphate. End of 1300 years of Islamic caliphate."
+  },
+  {
+    "id": "saudi-arabia",
+    "title": "Kingdom of Saudi Arabia Founded",
+    "hijri": {"year": 1351, "month": 9, "day": 1},
+    "gregorian": {"year": 1932, "month": 9, "day": 23},
+    "category": "milestone",
+    "tags": ["saudi", "modern"],
+    "description": "Abdulaziz Ibn Saud unified the kingdoms of Hejaz and Nejd, founding the Kingdom of Saudi Arabia."
+  },
+  {
+    "id": "pakistan-founded",
+    "title": "Pakistan Created",
+    "hijri": {"year": 1366, "month": 10, "day": 27},
+    "gregorian": {"year": 1947, "month": 8, "day": 14},
+    "category": "milestone",
+    "tags": ["modern", "pakistan"],
+    "description": "Pakistan was created as the first independent Muslim state in South Asia."
+  },
+  {
+    "id": "israel-founded",
+    "title": "State of Israel Established",
+    "hijri": {"year": 1367, "month": 10, "day": 1},
+    "gregorian": {"year": 1948, "month": 5, "day": 14},
+    "category": "milestone",
+    "tags": ["modern", "palestine"],
+    "description": "The State of Israel was established, leading to the Palestinian Nakba (catastrophe)."
+  },
+  {
+    "id": "al-qaeda",
+    "title": "Al-Qaeda Formed",
+    "hijri": {"year": 1409, "month": 4, "day": 1},
+    "gregorian": {"year": 1988, "month": 11, "day": 1},
+    "category": "milestone",
+    "tags": ["modern", "extremism"],
+    "description": "Al-Qaeda was formed by Osama bin Laden and others."
+  },
+  {
+    "id": "arab-spring",
+    "title": "Arab Spring Begins",
+    "hijri": {"year": 1432, "month": 4, "day": 1},
+    "gregorian": {"year": 2011, "month": 1, "day": 1},
+    "category": "milestone",
+    "tags": ["modern", "arab-spring"],
+    "description": "The Arab Spring uprisings began in Tunisia, spreading across the Arab world."
+  },
+  {
+    "id": "isis-declared",
+    "title": "ISIS Caliphate Declared",
+    "hijri": {"year": 1435, "month": 10, "day": 1},
+    "gregorian": {"year": 2014, "month": 6, "day": 29},
+    "category": "milestone",
+    "tags": ["modern", "isis", "extremism"],
+    "description": "ISIS declared a caliphate in parts of Iraq and Syria."
+  },
+  {
+    "id": "makkah-grand-mosque",
+    "title": "Grand Mosque Expansion Completed",
+    "hijri": {"year": 1441, "month": 5, "day": 1},
+    "gregorian": {"year": 2020, "month": 1, "day": 1},
+    "category": "milestone",
+    "tags": ["modern", "mecca", "architecture"],
+    "description": "Major expansion of the Grand Mosque in Mecca was completed, accommodating millions more pilgrims."
+  }
+]
