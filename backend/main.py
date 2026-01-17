@@ -2231,6 +2231,300 @@ def get_ayah_share_image_by_id(
 
 
 # =============================================================================
+# ISLAMIC EVENTS ENDPOINTS (SQLite)
+# =============================================================================
+
+@app.get("/api/events/on-this-day")
+def get_on_this_day(
+    month: int = Query(None, description="Gregorian month (1-12), defaults to current month"),
+    day: int = Query(None, description="Gregorian day (1-31), defaults to current day")
+):
+    """
+    Get Islamic historical events that occurred on a specific day.
+    Shows "on this day X years ago" style results.
+    """
+    from datetime import date
+
+    # Default to today if not provided
+    if month is None or day is None:
+        today = date.today()
+        month = today.month
+        day = today.day
+
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+
+        # Query events matching this Gregorian day/month
+        cursor.execute("""
+            SELECT id, title, hijri_year, hijri_month, hijri_day,
+                   gregorian_year, gregorian_month, gregorian_day,
+                   category, tags, description
+            FROM islamic_events
+            WHERE gregorian_month = ? AND gregorian_day = ?
+            ORDER BY gregorian_year ASC
+        """, (month, day))
+
+        rows = cursor.fetchall()
+
+        # Calculate years ago and format display
+        current_year = date.today().year
+        events = []
+        for row in rows:
+            gregorian_date = f"{row['gregorian_year']}-{row['gregorian_month']:02d}-{row['gregorian_day']:02d}"
+            years_ago = current_year - row['gregorian_year']
+
+            # Determine display text
+            if years_ago == 0:
+                display = "Today"
+            elif years_ago == 1:
+                display = "1 year ago today"
+            else:
+                display = f"{years_ago} years ago today"
+
+            # Parse tags from JSON
+            try:
+                tags = json.loads(row['tags']) if row['tags'] else []
+            except:
+                tags = []
+
+            events.append({
+                "id": row['id'],
+                "title": row['title'],
+                "hijri": {
+                    "year": row['hijri_year'],
+                    "month": row['hijri_month'],
+                    "day": row['hijri_day']
+                } if row['hijri_year'] else None,
+                "gregorian": {
+                    "year": row['gregorian_year'],
+                    "month": row['gregorian_month'],
+                    "day": row['gregorian_day']
+                },
+                "category": row['category'],
+                "tags": tags,
+                "description": row['description'],
+                "years_ago": years_ago,
+                "display": display
+            })
+
+        return {
+            "date": f"{month:02d}-{day:02d}",
+            "events": events,
+            "total": len(events)
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/api/events/search")
+def search_events(
+    q: str = Query(..., description="Search query", min_length=2),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    limit: int = Query(50, description="Max results", ge=1, le=200)
+):
+    """Search Islamic events by query text and/or category."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+
+        # Build query with filters
+        where_conditions = ["(title LIKE ? OR description LIKE ?)"]
+        params = [f"%{q}%", f"%{q}%"]
+
+        if category:
+            where_conditions.append("category = ?")
+            params.append(category)
+
+        where_clause = " AND ".join(where_conditions)
+
+        cursor.execute(f"""
+            SELECT id, title, hijri_year, hijri_month, hijri_day,
+                   gregorian_year, gregorian_month, gregorian_day,
+                   category, tags, description
+            FROM islamic_events
+            WHERE {where_clause}
+            ORDER BY gregorian_year ASC
+            LIMIT ?
+        """, params + [limit])
+
+        rows = cursor.fetchall()
+
+        events = []
+        for row in rows:
+            try:
+                tags = json.loads(row['tags']) if row['tags'] else []
+            except:
+                tags = []
+
+            events.append({
+                "id": row['id'],
+                "title": row['title'],
+                "hijri": {
+                    "year": row['hijri_year'],
+                    "month": row['hijri_month'],
+                    "day": row['hijri_day']
+                } if row['hijri_year'] else None,
+                "gregorian": {
+                    "year": row['gregorian_year'],
+                    "month": row['gregorian_month'],
+                    "day": row['gregorian_day']
+                },
+                "category": row['category'],
+                "tags": tags,
+                "description": row['description']
+            })
+
+        return {
+            "query": q,
+            "category": category,
+            "results": events,
+            "total": len(events)
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/api/events/categories")
+def get_event_categories():
+    """Get all available event categories."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT category, COUNT(*) as count
+            FROM islamic_events
+            GROUP BY category
+            ORDER BY count DESC
+        """)
+
+        rows = cursor.fetchall()
+        return {row['category']: row['count'] for row in rows}
+    finally:
+        conn.close()
+
+
+@app.get("/api/events/timeline")
+def get_events_timeline(
+    start_year: int = Query(None, description="Start year (Gregorian)"),
+    end_year: int = Query(None, description="End year (Gregorian)"),
+    calendar: str = Query("gregorian", description="Calendar system: 'gregorian' or 'hijri'")
+):
+    """
+    Get events within a time period.
+    Returns a chronological timeline of Islamic history.
+    """
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+
+        # Determine date column
+        if calendar == "hijri":
+            year_col = "hijri_year"
+            if not start_year:
+                start_year = 1
+            if not end_year:
+                end_year = 1500
+        else:
+            year_col = "gregorian_year"
+            if not start_year:
+                start_year = 500
+            if not end_year:
+                end_year = 2100
+
+        cursor.execute(f"""
+            SELECT id, title, hijri_year, hijri_month, hijri_day,
+                   gregorian_year, gregorian_month, gregorian_day,
+                   category, tags, description
+            FROM islamic_events
+            WHERE {year_col} >= ? AND {year_col} <= ?
+            ORDER BY {year_col} ASC, {year_col}_month ASC, {year_col}_day ASC
+        """, (start_year, end_year))
+
+        rows = cursor.fetchall()
+
+        events = []
+        for row in rows:
+            try:
+                tags = json.loads(row['tags']) if row['tags'] else []
+            except:
+                tags = []
+
+            events.append({
+                "id": row['id'],
+                "title": row['title'],
+                "hijri": {
+                    "year": row['hijri_year'],
+                    "month": row['hijri_month'],
+                    "day": row['hijri_day']
+                } if row['hijri_year'] else None,
+                "gregorian": {
+                    "year": row['gregorian_year'],
+                    "month": row['gregorian_month'],
+                    "day": row['gregorian_day']
+                },
+                "category": row['category'],
+                "tags": tags,
+                "description": row['description']
+            })
+
+        return {
+            "calendar": calendar,
+            "start_year": start_year,
+            "end_year": end_year,
+            "events": events,
+            "total": len(events)
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/api/events/{event_id}")
+def get_event(event_id: str):
+    """Get a specific event by ID."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, title, hijri_year, hijri_month, hijri_day,
+                   gregorian_year, gregorian_month, gregorian_day,
+                   category, tags, description
+            FROM islamic_events
+            WHERE id = ?
+        """, (event_id,))
+
+        row = cursor.fetchone()
+
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Event '{event_id}' not found")
+
+        try:
+            tags = json.loads(row['tags']) if row['tags'] else []
+        except:
+            tags = []
+
+        return {
+            "id": row['id'],
+            "title": row['title'],
+            "hijri": {
+                "year": row['hijri_year'],
+                "month": row['hijri_month'],
+                "day": row['hijri_day']
+            } if row['hijri_year'] else None,
+            "gregorian": {
+                "year": row['gregorian_year'],
+                "month": row['gregorian_month'],
+                "day": row['gregorian_day']
+            },
+            "category": row['category'],
+            "tags": tags,
+            "description": row['description']
+        }
+    finally:
+        conn.close()
+
+
+# =============================================================================
 # USER STATS SHARING ENDPOINTS
 # =============================================================================
 
