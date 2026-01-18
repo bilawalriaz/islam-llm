@@ -1549,12 +1549,18 @@ function SurahDetail() {
                         {/* Continuous Play Button */}
                         <button
                             className={`btn-icon-floating ${quranPlayMode ? 'btn-continuous-play-active' : ''}`}
-                            onClick={startContinuousPlay}
-                            title={quranPlayMode ? 'Continuous play enabled' : 'Play full Quran continuously'}
+                            onClick={toggleContinuousPlay}
+                            title={quranPlayMode ? 'Disable continuous play' : 'Play full Quran continuously'}
                         >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
-                            </svg>
+                            {quranPlayMode ? (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+                                </svg>
+                            ) : (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+                                </svg>
+                            )}
                             {quranPlayMode && (
                                 <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor" className="continuous-play-indicator">
                                     <circle cx="12" cy="12" r="10"/>
@@ -1781,6 +1787,13 @@ function SurahDetail() {
                             <line x1="6" y1="6" x2="18" y2="18"></line>
                         </svg>
                     </button>
+                </div>
+            )}
+
+            {/* Toast Notifications */}
+            {toast && (
+                <div className="toast-container">
+                    <Toast message={toast.message} type={toast.type} />
                 </div>
             )}
         </>
