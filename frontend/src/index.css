@@ -1717,8 +1717,14 @@ body:has(.floating-progress.visible) .surah-nav-footer {
 
 /* Smooth avoidance logic using :has() */
 body:has(.floating-progress.visible) .scroll-to-top {
-    bottom: 110px;
+    bottom: 120px;
     /* Brought down slightly from 120px */
+}
+
+/* Ensure footer is not covered by floating player on desktop */
+body:has(.floating-progress.visible) .surah-nav-footer {
+    padding-bottom: 120px;
+    transition: padding-bottom 0.4s ease;
 }
 
 /* =============================================================================
@@ -3057,13 +3063,13 @@ body:has(.floating-progress.visible) .scroll-to-top {
     }
 
     body:has(.floating-progress.visible) .scroll-to-top {
-        bottom: 210px;
+        bottom: 240px;
         /* Increased to clear the taller mobile player */
     }
 
     /* Mobile surah nav adjustment */
     body:has(.floating-progress.visible) .surah-nav-footer {
-        padding-bottom: 240px;
+        padding-bottom: 280px;
         /* More space for the stacked mobile player */
     }
 }
