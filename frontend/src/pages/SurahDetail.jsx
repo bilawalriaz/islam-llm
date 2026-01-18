@@ -1385,17 +1385,43 @@ function SurahDetail() {
             }
 
             {/* Floating Progress Indicator */}
-            {/* Floating Progress Indicator */}
             <div className={`floating-progress ${showFloatingProgress ? 'visible' : ''}`}>
                 <div className="floating-progress-content">
                     <div className="floating-progress-info">
-                        <div className="floating-progress-titles">
-                            <span className="floating-progress-surah-ar">{surah?.name}</span>
-                            <span className="floating-progress-surah-en">{surah?.englishName}</span>
-                            <div className="floating-progress-dot" />
-                            <span className="floating-progress-label">
-                                Ayah {playingAyah !== null ? ayahs[playingAyah]?.number_in_surah : (ayahs[lastPlayedIndex]?.number_in_surah || '-')} of {ayahs.length}
-                            </span>
+                        <div className="floating-progress-titles marquee-container">
+                            <div className="marquee-text">
+                                <span className="floating-progress-surah-ar">{surah?.name}</span>
+                                <span className="floating-progress-surah-en">{surah?.english_name}</span>
+                                <span className="floating-progress-surah-translation">({surah?.english_name_translation})</span>
+                                <div className="floating-progress-dot" />
+                                <span className="floating-progress-label">
+                                    Ayah {playingAyah !== null ? ayahs[playingAyah]?.number_in_surah : (ayahs[lastPlayedIndex]?.number_in_surah || '-')} of {ayahs.length}
+                                </span>
+                                {playingAyah !== null && translationAyahs[playingAyah] && (
+                                    <>
+                                        <div className="floating-progress-dot" />
+                                        <span className="floating-progress-ayah-translation">
+                                            {translationAyahs[playingAyah].text}
+                                        </span>
+                                    </>
+                                )}
+                                {/* Duplicate for seamless loop */}
+                                <span className="floating-progress-surah-ar" style={{ marginLeft: '40px' }}>{surah?.name}</span>
+                                <span className="floating-progress-surah-en">{surah?.english_name}</span>
+                                <span className="floating-progress-surah-translation">({surah?.english_name_translation})</span>
+                                <div className="floating-progress-dot" />
+                                <span className="floating-progress-label">
+                                    Ayah {playingAyah !== null ? ayahs[playingAyah]?.number_in_surah : (ayahs[lastPlayedIndex]?.number_in_surah || '-')} of {ayahs.length}
+                                </span>
+                                {playingAyah !== null && translationAyahs[playingAyah] && (
+                                    <>
+                                        <div className="floating-progress-dot" />
+                                        <span className="floating-progress-ayah-translation">
+                                            {translationAyahs[playingAyah].text}
+                                        </span>
+                                    </>
+                                )}
+                            </div>
                         </div>
                         {completionStats && (
                             <div className="floating-progress-bar">
