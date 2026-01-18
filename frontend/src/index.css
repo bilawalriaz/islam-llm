@@ -2954,6 +2954,7 @@ body:has(.floating-progress.visible) .surah-nav-footer {
         flex-direction: column;
         align-items: stretch;
         gap: 12px;
+        max-width: 100%;
     }
 
     .floating-progress-info {
