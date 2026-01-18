@@ -38,6 +38,8 @@ function Journey() {
     const [showAllBookmarks, setShowAllBookmarks] = useState(false);
     const [activeTab, setActiveTab] = useState('journey'); // 'journey', 'share'
     const [motivationalIndex, setMotivationalIndex] = useState(0);
+    const [currentPage, setCurrentPage] = useState(1);
+    const surahsPerPage = 24; // Show 24 surahs per page
 
     // Motivational messages for the hero section
     const motivationalMessages = [
@@ -166,6 +168,21 @@ function Journey() {
     // Memoize filtered surahs to prevent recalculation on every render
     const filteredSurahs = useMemo(() => getFilteredSurahs(), [surahsProgress, viewMode]);
 
+    // Calculate paginated surahs - only show current page
+    const paginatedSurahs = useMemo(() => {
+        const startIndex = (currentPage - 1) * surahsPerPage;
+        const endIndex = startIndex + surahsPerPage;
+        return filteredSurahs.slice(startIndex, endIndex);
+    }, [filteredSurahs, currentPage]);
+
+    // Calculate total pages
+    const totalPages = Math.ceil(filteredSurahs.length / surahsPerPage);
+
+    // Reset to page 1 when viewMode changes
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [viewMode]);
+
     // Skeleton loader for initial load
     if (loading) {
         return (
@@ -241,9 +258,17 @@ function Journey() {
             </div>
 
             {/* Motivational Hero Section */}
-            <Card className="mb-4" style={{ marginBottom: '24px', overflow: 'hidden', position: 'relative' }}>
-                <div className="card-body" style={{
+            <Card
+                className="mb-4 motivational-card"
+                style={{
+                    marginBottom: '24px',
                     background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.12) 0%, rgba(249, 115, 22, 0.03) 100%)',
+                    border: 'none',
+                    position: 'relative',
+                    overflow: 'hidden'
+                }}
+            >
+                <div className="card-body" style={{
                     padding: '40px',
                     position: 'relative'
                 }}>
@@ -450,7 +475,7 @@ function Journey() {
 
                     {/* Surahs Grid */}
                     <div className="surah-progress-grid">
-                        {filteredSurahs.map((surah) => {
+                        {paginatedSurahs.map((surah) => {
                             const percentage = Math.round((surah.completed_count / surah.total_ayahs) * 100);
                             const color = getCompletionColor(percentage);
 
@@ -504,6 +529,90 @@ function Journey() {
                             );
                         })}
                     </div>
+
+                    {/* Pagination Controls */}
+                    {totalPages > 1 && (
+                        <div style={{
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            gap: '8px',
+                            marginTop: '32px',
+                            flexWrap: 'wrap'
+                        }}>
+                            {/* Previous button */}
+                            <button
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                                className="btn btn-secondary"
+                                style={{
+                                    padding: '8px 16px',
+                                    fontSize: '0.875rem',
+                                    opacity: currentPage === 1 ? 0.5 : 1,
+                                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
+                                }}
+                            >
+                                ← Previous
+                            </button>
+
+                            {/* Page numbers */}
+                            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                                let pageNum;
+                                if (totalPages <= 5) {
+                                    pageNum = i + 1;
+                                } else if (currentPage <= 3) {
+                                    pageNum = i + 1;
+                                } else if (currentPage >= totalPages - 2) {
+                                    pageNum = totalPages - 4 + i;
+                                } else {
+                                    pageNum = currentPage - 2 + i;
+                                }
+
+                                return (
+                                    <button
+                                        key={pageNum}
+                                        onClick={() => setCurrentPage(pageNum)}
+                                        className={currentPage === pageNum ? 'btn btn-primary' : 'btn btn-secondary'}
+                                        style={{
+                                            minWidth: '40px',
+                                            height: '40px',
+                                            padding: '0',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '0.875rem'
+                                        }}
+                                    >
+                                        {pageNum}
+                                    </button>
+                                );
+                            })}
+
+                            {/* Next button */}
+                            <button
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                disabled={currentPage === totalPages}
+                                className="btn btn-secondary"
+                                style={{
+                                    padding: '8px 16px',
+                                    fontSize: '0.875rem',
+                                    opacity: currentPage === totalPages ? 0.5 : 1,
+                                    cursor: currentPage === totalPages ? 'not-allowed' : 'pointer'
+                                }}
+                            >
+                                Next →
+                            </button>
+
+                            {/* Page info */}
+                            <span style={{
+                                marginLeft: '16px',
+                                fontSize: '0.875rem',
+                                color: 'var(--text-secondary)'
+                            }}>
+                                Page {currentPage} of {totalPages}
+                            </span>
+                        </div>
+                    )}
 
                     {/* Bookmarks Section */}
                     <Card title={bookmarks.length > 0 ? `Your Bookmarks (${bookmarks.length})` : "Bookmarks"} className="mt-4">
