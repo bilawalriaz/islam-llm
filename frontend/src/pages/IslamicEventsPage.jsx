@@ -13,6 +13,7 @@ function IslamicEventsPage() {
     const [activeTab, setActiveTab] = useState('on-this-day');
     const [loading, setLoading] = useState(true);
     const [todayEvents, setTodayEvents] = useState([]);
+    const [showingExamples, setShowingExamples] = useState(false);
     const [categories, setCategories] = useState({});
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
@@ -26,6 +27,7 @@ function IslamicEventsPage() {
             const response = await fetch(`/api/events/on-this-day?month=${today.getMonth() + 1}&day=${today.getDate()}`);
             const data = await response.json();
             setTodayEvents(data.events || []);
+            setShowingExamples(data.showing_examples || false);
         } catch (error) {
             console.error('Error fetching on-this-day events:', error);
         } finally {
@@ -234,8 +236,12 @@ function IslamicEventsPage() {
                 <>
                     {todayEvents.length > 0 && (
                         <p className="text-muted" style={{ marginBottom: '16px' }}>
-                            Showing {todayEvents.length} event{todayEvents.length !== 1 ? 's' : ''} from{' '}
-                            {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+                            {showingExamples ? (
+                                <>No historical events on this day. Here are some notable events from Islamic history:</>
+                            ) : (
+                                <>Showing {todayEvents.length} event{todayEvents.length !== 1 ? 's' : ''} from{' '}
+                                {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}</>
+                            )}
                         </p>
                     )}
                     {todayEvents.length === 0 ? (

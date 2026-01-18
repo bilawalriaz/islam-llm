@@ -24,6 +24,7 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from share_image import generate_ayah_image_bytes
+from embeddings import generate_embedding, search_similar
 
 # Supabase integration
 from supabase import create_client, Client
@@ -629,6 +630,79 @@ def highlight_match(text: str, query: str, language: str = 'en') -> str:
     # TODO: Implement proper highlighting using FTS5 snippet/bm25highlight functions
     # or regex-based matching for search terms
     return text
+
+
+@app.get("/api/quran/search/semantic")
+def search_quran_semantic(
+    q: str = Query(..., description="Search query text", min_length=1),
+    language: Optional[str] = Query(None, description="Filter by language: ar, en (default: en for semantic)"),
+    surah_id: Optional[int] = Query(None, description="Filter to specific surah"),
+    limit: int = Query(20, description="Max results (default: 20, max: 100)", ge=1, le=100)
+):
+    """
+    Semantic search across Quran ayahs using vector embeddings.
+    
+    Finds conceptually related verses based on meaning, not just keywords.
+    Uses all-MiniLM-L6-v2 model for embeddings.
+    """
+    # Default to English for semantic search (model is English-optimized)
+    if language is None:
+        # Detect Arabic in query
+        arabic_chars = sum(1 for c in q if '\u0600' <= c <= '\u06ff')
+        language = 'ar' if arabic_chars > len(q) * 0.3 else 'en'
+    
+    conn = get_db_connection()
+    try:
+        # Generate embedding for query
+        query_embedding = generate_embedding(q)
+        
+        # Search for similar ayahs
+        results = search_similar(
+            query_embedding,
+            conn,
+            language=language if language != 'all' else None,
+            surah_id=surah_id,
+            limit=limit
+        )
+        
+        # Format results
+        formatted_results = []
+        for r in results:
+            formatted_results.append({
+                "ayah_number": r["ayah_number"],
+                "surah_id": r["surah_id"],
+                "number_in_surah": r["number_in_surah"],
+                "surah_name": r["surah_name"],
+                "surah_english_name": r["surah_english_name"],
+                "surah_english_name_translation": r["surah_english_name_translation"],
+                "text": r["text"],
+                "highlighted_text": r["text"],  # No highlighting for semantic
+                "edition": r["edition"],
+                "language": r["language"],
+                "similarity": round(r["similarity"], 4)
+            })
+        
+        return {
+            "query": q,
+            "language": language,
+            "mode": "semantic",
+            "total_count": len(formatted_results),
+            "limit": limit,
+            "offset": 0,
+            "results": formatted_results
+        }
+    
+    except Exception as e:
+        # If embeddings not generated yet, return helpful error
+        if "ayah_embeddings" in str(e):
+            raise HTTPException(
+                status_code=503,
+                detail="Semantic search not available. Embeddings need to be generated first."
+            )
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    finally:
+        conn.close()
 
 
 # =============================================================================
@@ -2270,6 +2344,8 @@ def get_on_this_day(
         # Calculate years ago and format display
         current_year = date.today().year
         events = []
+        showing_examples = False
+
         for row in rows:
             gregorian_date = f"{row['gregorian_year']}-{row['gregorian_month']:02d}-{row['gregorian_day']:02d}"
             years_ago = current_year - row['gregorian_year']
@@ -2308,10 +2384,61 @@ def get_on_this_day(
                 "display": display
             })
 
+        # If no events for this day, show example events
+        if not events:
+            showing_examples = True
+            # Get some notable Islamic events as examples
+            cursor.execute("""
+                SELECT id, title, hijri_year, hijri_month, hijri_day,
+                       gregorian_year, gregorian_month, gregorian_day,
+                       category, tags, description
+                FROM islamic_events
+                WHERE category IN ('milestone', 'battle', 'birth', 'conquest')
+                ORDER BY RANDOM()
+                LIMIT 5
+            """)
+            example_rows = cursor.fetchall()
+
+            for row in example_rows:
+                years_ago = current_year - row['gregorian_year']
+                if years_ago == 0:
+                    display = "This year"
+                elif years_ago == 1:
+                    display = "1 year ago"
+                else:
+                    display = f"{years_ago} years ago"
+
+                try:
+                    tags = json.loads(row['tags']) if row['tags'] else []
+                except:
+                    tags = []
+
+                events.append({
+                    "id": row['id'],
+                    "title": row['title'],
+                    "hijri": {
+                        "year": row['hijri_year'],
+                        "month": row['hijri_month'],
+                        "day": row['hijri_day']
+                    } if row['hijri_year'] else None,
+                    "gregorian": {
+                        "year": row['gregorian_year'],
+                        "month": row['gregorian_month'],
+                        "day": row['gregorian_day']
+                    },
+                    "category": row['category'],
+                    "tags": tags,
+                    "description": row['description'],
+                    "years_ago": years_ago,
+                    "display": display,
+                    "is_example": True
+                })
+
         return {
             "date": f"{month:02d}-{day:02d}",
             "events": events,
-            "total": len(events)
+            "total": len(events),
+            "showing_examples": showing_examples
         }
     finally:
         conn.close()
@@ -2319,7 +2446,7 @@ def get_on_this_day(
 
 @app.get("/api/events/search")
 def search_events(
-    q: str = Query(..., description="Search query", min_length=2),
+    q: Optional[str] = Query("", description="Search query"),
     category: Optional[str] = Query(None, description="Filter by category"),
     limit: int = Query(50, description="Max results", ge=1, le=200)
 ):
@@ -2329,14 +2456,24 @@ def search_events(
         cursor = conn.cursor()
 
         # Build query with filters
-        where_conditions = ["(title LIKE ? OR description LIKE ?)"]
-        params = [f"%{q}%", f"%{q}%"]
+        where_conditions = []
+        params = []
 
+        # Only add text search if query is provided and has at least 2 characters
+        if q and len(q.strip()) >= 2:
+            where_conditions.append("(title LIKE ? OR description LIKE ?)")
+            params = [f"%{q}%", f"%{q}%"]
+
+        # Filter by category if provided
         if category:
             where_conditions.append("category = ?")
             params.append(category)
 
-        where_clause = " AND ".join(where_conditions)
+        # If no filters, return all events (up to limit)
+        if not where_conditions:
+            where_clause = "1=1"
+        else:
+            where_clause = " AND ".join(where_conditions)
 
         cursor.execute(f"""
             SELECT id, title, hijri_year, hijri_month, hijri_day,
@@ -2350,12 +2487,24 @@ def search_events(
 
         rows = cursor.fetchall()
 
+        from datetime import date
+        current_year = date.today().year
+
         events = []
         for row in rows:
             try:
                 tags = json.loads(row['tags']) if row['tags'] else []
             except:
                 tags = []
+
+            # Calculate years ago and display
+            years_ago = current_year - row['gregorian_year']
+            if years_ago == 0:
+                display = "This year"
+            elif years_ago == 1:
+                display = "1 year ago"
+            else:
+                display = f"{years_ago} years ago"
 
             events.append({
                 "id": row['id'],
@@ -2372,7 +2521,9 @@ def search_events(
                 },
                 "category": row['category'],
                 "tags": tags,
-                "description": row['description']
+                "description": row['description'],
+                "years_ago": years_ago,
+                "display": display
             })
 
         return {
@@ -2503,6 +2654,17 @@ def get_event(event_id: str):
         except:
             tags = []
 
+        # Calculate years ago and display
+        from datetime import date
+        current_year = date.today().year
+        years_ago = current_year - row['gregorian_year']
+        if years_ago == 0:
+            display = "This year"
+        elif years_ago == 1:
+            display = "1 year ago"
+        else:
+            display = f"{years_ago} years ago"
+
         return {
             "id": row['id'],
             "title": row['title'],
@@ -2518,7 +2680,9 @@ def get_event(event_id: str):
             },
             "category": row['category'],
             "tags": tags,
-            "description": row['description']
+            "description": row['description'],
+            "years_ago": years_ago,
+            "display": display
         }
     finally:
         conn.close()
