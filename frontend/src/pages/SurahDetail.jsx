@@ -937,6 +937,31 @@ function SurahDetail() {
         playAyah(0);
     };
 
+    const startContinuousPlay = async () => {
+        try {
+            // Start a Quran play session on the backend
+            const sessionData = await startQuranPlay();
+            setQuranSessionId(sessionData.session_id);
+            setQuranPlayMode(true);
+            setAutoPlay(true);
+
+            // Determine starting ayah: current playing, last played, or first
+            const startIndex = playingAyah !== null
+                ? playingAyah
+                : lastPlayingAyahRef.current !== null
+                    ? lastPlayingAyahRef.current
+                    : lastPlayedIndex !== null
+                        ? lastPlayedIndex
+                        : completionStats?.first_unread_ayah
+                            ? ayahs.findIndex(a => a.number_in_surah === completionStats.first_unread_ayah)
+                            : 0;
+
+            playAyah(startIndex >= 0 ? startIndex : 0);
+        } catch (err) {
+            console.error('Failed to start continuous play:', err);
+        }
+    };
+
     const stopPlayback = () => {
         setAutoPlay(false);
         pauseAyah();
@@ -1495,6 +1520,22 @@ function SurahDetail() {
                             title={`Playback Speed: ${playbackSpeed}x`}
                         >
                             {playbackSpeed}x
+                        </button>
+
+                        {/* Continuous Play Button */}
+                        <button
+                            className={`btn-icon-floating ${quranPlayMode ? 'btn-continuous-play-active' : ''}`}
+                            onClick={startContinuousPlay}
+                            title={quranPlayMode ? 'Continuous play enabled' : 'Play full Quran continuously'}
+                        >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+                            </svg>
+                            {quranPlayMode && (
+                                <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor" className="continuous-play-indicator">
+                                    <circle cx="12" cy="12" r="10"/>
+                                </svg>
+                            )}
                         </button>
 
                         <div className="floating-progress-separator" />

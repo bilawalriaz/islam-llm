@@ -185,6 +185,20 @@ body {
     gap: 12px;
 }
 
+/* Header right controls - contains search + burger on mobile */
+.header-right-controls {
+    display: none;
+    /* Hidden on desktop, shown on mobile */
+    align-items: center;
+    gap: 8px;
+}
+
+/* Mobile menu wrapper - animated on mobile */
+.mobile-menu-wrapper {
+    display: contents;
+    /* On desktop, acts as if not there */
+}
+
 /* Burger Menu */
 .burger-menu {
     display: none;
@@ -2023,6 +2037,31 @@ body:has(.floating-progress.visible) .surah-nav-footer {
     letter-spacing: 0.02em;
 }
 
+.btn-continuous-play-active {
+    background: linear-gradient(145deg, #10b981, #059669);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: white;
+    box-shadow:
+        0 0 20px rgba(16, 185, 129, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    position: relative;
+}
+
+.btn-continuous-play-active:hover {
+    background: linear-gradient(145deg, #34d399, #10b981);
+    box-shadow:
+        0 0 30px rgba(16, 185, 129, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.continuous-play-indicator {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    background: white;
+    border-radius: 50%;
+}
+
 .floating-progress-volume {
     display: flex;
     align-items: center;
@@ -2594,17 +2633,62 @@ body:has(.floating-progress.visible) .surah-nav-footer {
         flex: 1;
     }
 
-    .nav-links {
-        display: none;
+    /* Header right controls - search always visible next to burger */
+    .header-right-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        order: 2;
+    }
+
+    .header-right-controls .header-search-btn {
+        display: flex;
+    }
+
+    .header-right-controls .burger-menu {
+        position: relative;
+        order: unset;
+    }
+
+    /* Mobile menu wrapper with animation */
+    .mobile-menu-wrapper {
+        display: flex;
         width: 100%;
         flex-direction: column;
-        gap: 4px;
+        gap: 8px;
         order: 3;
+        overflow: hidden;
+        max-height: 0;
+        opacity: 0;
+        transform: translateY(-10px);
+        transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        pointer-events: none;
+    }
+
+    .mobile-menu-wrapper.open {
+        max-height: 500px;
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
         padding-top: 8px;
     }
 
-    .nav-links.nav-links-open {
+    .mobile-menu-wrapper .nav-links {
         display: flex;
+    }
+
+    .mobile-menu-wrapper .user-menu {
+        display: flex;
+    }
+
+    .mobile-menu-wrapper .auth-links {
+        display: flex;
+    }
+
+    .nav-links {
+        width: 100%;
+        flex-direction: column;
+        gap: 4px;
     }
 
     .nav-link {
@@ -2618,21 +2702,15 @@ body:has(.floating-progress.visible) .surah-nav-footer {
         justify-content: center;
     }
 
-    /* Show "Search" text on mobile */
+    /* Show nav-link-text on mobile */
     .nav-link-icon .nav-link-text {
         display: inline;
     }
 
     .user-menu {
-        display: none;
         width: 100%;
         flex-direction: column;
         gap: 8px;
-        order: 4;
-    }
-
-    .user-menu.user-menu-open {
-        display: flex;
     }
 
     .user-menu .btn {
@@ -2641,15 +2719,9 @@ body:has(.floating-progress.visible) .surah-nav-footer {
     }
 
     .auth-links {
-        display: none;
         width: 100%;
         flex-direction: column;
         gap: 8px;
-        order: 3;
-    }
-
-    .auth-links.auth-links-open {
-        display: flex;
     }
 
     .auth-links .btn {
@@ -2659,7 +2731,6 @@ body:has(.floating-progress.visible) .surah-nav-footer {
 
     .burger-menu {
         display: flex;
-        order: 2;
     }
 
     .page-header {
@@ -3001,7 +3072,6 @@ body:has(.floating-progress.visible) .surah-nav-footer {
         justify-content: center;
         gap: 12px;
         padding-top: 8px;
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .floating-progress-volume {
