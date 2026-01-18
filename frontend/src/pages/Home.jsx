@@ -343,13 +343,84 @@ function Home() {
                 </div>
             </section>
 
+            {/* Privacy Commitment Section */}
+            <section className="privacy-section" style={{
+                padding: '80px 0',
+                background: 'var(--bg-white)',
+                textAlign: 'center'
+            }}>
+                <div style={{ maxWidth: '800px', margin: '0 auto', padding: '0 24px' }}>
+                    <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '64px',
+                        height: '64px',
+                        borderRadius: '50%',
+                        background: 'rgba(16, 185, 129, 0.1)',
+                        color: '#10b981',
+                        fontSize: '2rem',
+                        marginBottom: '24px'
+                    }}>
+                        🔒
+                    </div>
+                    <h2 style={{
+                        fontSize: '2.25rem',
+                        fontWeight: '800',
+                        marginBottom: '24px',
+                        color: 'var(--text-primary)'
+                    }}>
+                        Privacy by Design, Not by Choice
+                    </h2>
+                    <p style={{
+                        fontSize: '1.125rem',
+                        lineHeight: '1.8',
+                        color: 'var(--text-secondary)',
+                        marginBottom: '32px'
+                    }}>
+                        We believe that your spiritual journey should be sacred and private. Unlike many other platforms, <strong>Quran Reader will never show ads, never track your personal behavior, and never sell your data.</strong>
+                    </p>
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                        gap: '32px',
+                        textAlign: 'left'
+                    }}>
+                        <div>
+                            <h4 style={{ color: 'var(--text-primary)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ color: '#10b981' }}>✓</span> No User Tracking
+                            </h4>
+                            <p style={{ fontSize: '0.9375rem', color: 'var(--text-muted)' }}>
+                                We don't use invasive trackers. We use simple Cloudflare Analytics to see basic page view counts without identifying you.
+                            </p>
+                        </div>
+                        <div>
+                            <h4 style={{ color: 'var(--text-primary)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ color: '#10b981' }}>✓</span> No Advertisements
+                            </h4>
+                            <p style={{ fontSize: '0.9375rem', color: 'var(--text-muted)' }}>
+                                Your connection with the Quran should be distraction-free. No banners, no popups, no sponsored content. Ever.
+                            </p>
+                        </div>
+                        <div>
+                            <h4 style={{ color: 'var(--text-primary)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ color: '#10b981' }}>✓</span> No Data Selling
+                            </h4>
+                            <p style={{ fontSize: '0.9375rem', color: 'var(--text-muted)' }}>
+                                By the will of God, we are committed to keeping this service pure. We will never "sell out" your personal information.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             {/* Footer CTA */}
             <section className="cta-section">
                 <Card className="cta-card">
                     <h2>Ready to Start Reading?</h2>
                     <p>Dive into the Quran with a beautiful, distraction-free reading experience.</p>
-                    <p style={{ fontSize: '0.875rem', opacity: 0.85, marginBottom: '24px' }}>
-                        🔒 No tracking. No ads. Ever. Accounts are only used to save your reading progress.
+                    <p style={{ fontSize: '0.875rem', opacity: 0.9, marginBottom: '24px', fontWeight: '500' }}>
+                        🛡️ Your journey is private. No tracking, no ads, always free.
                     </p>
                     <Link to="/quran" className="btn btn-primary btn-large">
                         Browse Quran

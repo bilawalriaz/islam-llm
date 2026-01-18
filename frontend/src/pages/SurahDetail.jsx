@@ -152,12 +152,25 @@ function SurahDetail() {
     ];
 
     useEffect(() => {
-        loadSurahData();
-        loadEditions();
+        // Reset state when surah changes to avoid stale data from previous surah
+        setPlayingAyah(null);
+        setLastPlayedIndex(0);
+        setReadingAyah(null);
+        setCompletedAyahs([]);
+        setCompletionStats(null);
+        setScrollProgress(0);
+        setShowSurahCompletion(false);
+        setLoading(true);
+        setAyahs([]);
+        setTranslationAyahs([]);
 
-        // Reset hash scroll tracking when surah changes
+        // Reset refs
+        lastPlayingAyahRef.current = null;
         hasScrolledToHashRef.current = false;
         initialSurahIdRef.current = id;
+
+        loadSurahData();
+        loadEditions();
 
         // Only scroll to top if there's no hash (deep link to specific ayah)
         if (!location.hash) {
@@ -182,12 +195,39 @@ function SurahDetail() {
 
             // Start playing first ayah of this surah after a short delay
             setTimeout(() => {
-                if (ayahs.length > 0) {
-                    playAyah(0);
-                }
+                // Fetch current ayahs to ensure we have them
+                setAyahs(currentAyahs => {
+                    if (currentAyahs.length > 0) {
+                        playAyah(0);
+                    }
+                    return currentAyahs;
+                });
             }, 500);
         }
     }, [id]);
+
+    // Handle pending bookmark after login
+    useEffect(() => {
+        if (isAuthenticated && ayahs.length > 0) {
+            const pending = sessionStorage.getItem('pendingBookmark');
+            if (pending) {
+                try {
+                    const { surahId, ayahId } = JSON.parse(pending);
+                    // Check if we are on the right surah
+                    if (surahId === id) {
+                        const targetAyah = ayahs.find(a => a.id === ayahId);
+                        if (targetAyah && !bookmarks[targetAyah.id]) {
+                            handleBookmarkToggle(targetAyah);
+                        }
+                    }
+                } catch (e) {
+                    console.error('Failed to process pending bookmark', e);
+                } finally {
+                    sessionStorage.removeItem('pendingBookmark');
+                }
+            }
+        }
+    }, [isAuthenticated, ayahs.length, id]);
 
     // Handle scrolling to a specific ayah based on URL hash (e.g., #ayah-7)
     useEffect(() => {
@@ -244,7 +284,7 @@ function SurahDetail() {
             loadBookmarkStatuses();
             loadCompletionStatus();
         }
-    }, [ayahs, isAuthenticated]);
+    }, [ayahs.length, isAuthenticated, id]);
 
     // Detect when progress card scrolls out of view to show floating indicator
     // Also calculate overall scroll percentage for the visual indicator
@@ -624,10 +664,15 @@ function SurahDetail() {
 
     const handleBookmarkToggle = async (ayah) => {
         if (!isAuthenticated) {
-            // Show login prompt instead of redirecting
+            // Save intended action for after login
+            const pendingBookmark = {
+                surahId: id,
+                ayahId: ayah.id,
+                ayahNumber: ayah.number_in_surah,
+                timestamp: Date.now()
+            };
+            sessionStorage.setItem('pendingBookmark', JSON.stringify(pendingBookmark));
             setShowLoginPrompt(true);
-            // Auto-dismiss after 4 seconds
-            setTimeout(() => setShowLoginPrompt(false), 4000);
             return;
         }
 
@@ -1607,28 +1652,42 @@ function SurahDetail() {
                 </div>
             </Modal>
 
-            {/* Login Prompt Toast */}
-            {showLoginPrompt && (
-                <div className="toast-notification toast-info">
-                    <div className="toast-content">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <line x1="12" y1="8" x2="12" y2="12"></line>
-                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                        </svg>
-                        <span>Sign in to bookmark ayahs and track progress.</span>
-                        <Link to="/login" className="toast-action" onClick={() => setShowLoginPrompt(false)}>
-                            Sign in
+            {/* Login Prompt Modal */}
+            <Modal
+                isOpen={showLoginPrompt}
+                onClose={() => setShowLoginPrompt(false)}
+                title="Sign in Required"
+                size="small"
+                footer={
+                    <div className="d-flex gap-2 w-100">
+                        <Button
+                            variant="secondary"
+                            className="flex-1"
+                            onClick={() => setShowLoginPrompt(false)}
+                        >
+                            Cancel
+                        </Button>
+                        <Link
+                            to={`/login?redirect=${encodeURIComponent(location.pathname + location.hash)}`}
+                            className="btn btn-primary flex-1 text-center"
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        >
+                            Sign In
                         </Link>
                     </div>
-                    <button className="toast-dismiss" onClick={() => setShowLoginPrompt(false)} title="Dismiss">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
-                    </button>
+                }
+            >
+                <div style={{ textAlign: 'center', padding: '10px 0' }}>
+                    <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🔖</div>
+                    <p style={{ marginBottom: '8px', fontWeight: '600' }}>Want to save this ayah?</p>
+                    <p className="text-muted small">
+                        Create a free account or sign in to bookmark ayahs, track your reading progress, and sync across devices.
+                    </p>
+                    <p className="text-muted extra-small" style={{ marginTop: '12px', fontStyle: 'italic' }}>
+                        Your journey is private. No ads, no tracking, ever.
+                    </p>
                 </div>
-            )}
+            </Modal>
         </>
     );
 }

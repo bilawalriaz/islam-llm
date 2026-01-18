@@ -103,9 +103,13 @@ function AuthCallback() {
                 // Small delay to show the success message
                 await new Promise(resolve => setTimeout(resolve, 500));
 
+                // Get redirect URL from sessionStorage
+                const redirectUrl = sessionStorage.getItem('authRedirect') || '/';
+                sessionStorage.removeItem('authRedirect');
+
                 // Force a page reload to ensure AuthContext picks up the new token
                 // This is more reliable than trying to update the context
-                window.location.href = '/';
+                window.location.href = redirectUrl;
                 return;
 
             } catch (err) {

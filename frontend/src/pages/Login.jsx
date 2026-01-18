@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
@@ -19,9 +19,16 @@ function Login() {
     const [loading, setLoading] = useState(false);
     const { loginUser } = useAuth();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const redirectUrl = searchParams.get('redirect') || '/';
 
     const handleGoogleSignIn = async () => {
         try {
+            // Save redirect URL in sessionStorage for AuthCallback to use
+            if (redirectUrl) {
+                sessionStorage.setItem('authRedirect', redirectUrl);
+            }
+
             const { data, error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
@@ -51,7 +58,7 @@ function Login() {
         const result = await loginUser(email, password);
 
         if (result.success) {
-            navigate('/');
+            navigate(redirectUrl);
         } else {
             setError(result.error || 'Login failed. Please try again.');
         }
