@@ -2919,28 +2919,49 @@ body:has(.floating-progress.visible) .scroll-to-top {
 
     .floating-progress-info {
         text-align: center;
+        gap: 8px;
+    }
+
+    .floating-progress-titles {
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .floating-progress-surah-ar {
+        font-size: 1.125rem;
     }
 
     .floating-progress-controls {
-        justify-content: space-between;
-        flex-wrap: wrap;
+        justify-content: center;
+        border-right: none;
+        padding-right: 0;
+        width: 100%;
+    }
+
+    .floating-progress-settings {
+        width: 100%;
+        min-width: auto;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .floating-progress-volume {
         flex: 1;
-        min-width: 80px;
-        justify-content: center;
-        border-left: none;
-        padding-left: 0;
+        max-width: 150px;
     }
 
     .volume-slider {
-        width: 80px;
+        width: 100%;
     }
 
     .reciter-select-floating {
         flex: 1;
-        min-width: 120px;
+        max-width: 150px;
     }
 
     .btn-icon-floating {
