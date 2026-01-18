@@ -1769,8 +1769,10 @@ body:has(.floating-progress.visible) .scroll-to-top {
     display: flex;
     align-items: center;
     gap: 16px;
+    width: fit-content;
     min-width: 440px;
-    max-width: 580px;
+    max-width: 90vw;
+    margin: 0 auto;
     color: white;
     /* 120Hz Optimization */
     will-change: transform, opacity;
@@ -1820,7 +1822,7 @@ body:has(.floating-progress.visible) .scroll-to-top {
 .floating-progress-titles {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     flex-wrap: nowrap;
 }
 
@@ -1849,20 +1851,39 @@ body:has(.floating-progress.visible) .scroll-to-top {
     font-weight: 500;
 }
 
-/* Marquee & Edge Fade */
 .marquee-container {
     flex: 1;
     overflow: hidden;
     position: relative;
     white-space: nowrap;
+    display: flex;
+    justify-content: center;
     mask-image: linear-gradient(to right, transparent, black 15px, black calc(100% - 15px), transparent);
     -webkit-mask-image: linear-gradient(to right, transparent, black 15px, black calc(100% - 15px), transparent);
 }
 
+.marquee-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+    padding-right: 60px;
+    /* Space between loops */
+}
+
 .marquee-text {
-    display: inline-block;
-    padding-left: 10px;
-    animation: marquee 15s linear infinite;
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    /* Gap will be handled by marquee-item margin if needed */
+    white-space: nowrap;
+    animation: none;
+    /* Default to no animation */
+}
+
+/* Set animation only if needed via JS or assume active */
+.marquee-text.animate {
+    animation: marquee 30s linear infinite;
 }
 
 @keyframes marquee {
@@ -3003,10 +3024,10 @@ body:has(.floating-progress.visible) .scroll-to-top {
         flex-direction: row;
         align-items: center;
         justify-content: center;
-        gap: 20px;
+        gap: 16px;
         padding-top: 12px;
-        border-top: 1px solid rgba(255, 255, 255, 0.08);
-        /* Keeping it subtle but ensuring it's for mobile-only spacing */
+        border-top: none;
+        align-self: center;
     }
 
     .floating-progress-volume {

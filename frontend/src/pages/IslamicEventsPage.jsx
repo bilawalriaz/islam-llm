@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { LoadingState, EmptyState } from '../components/Spinner';
 
 /**
@@ -10,6 +11,7 @@ import { LoadingState, EmptyState } from '../components/Spinner';
  * - Categories - Browse by event type (Battle, Birth, Death, Milestone, etc.)
  */
 function IslamicEventsPage() {
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('on-this-day');
     const [loading, setLoading] = useState(true);
     const [todayEvents, setTodayEvents] = useState([]);
@@ -107,7 +109,7 @@ function IslamicEventsPage() {
         <div
             key={event.id || index}
             className="surah-card"
-            onClick={() => window.location.href = `/events/${event.id}`}
+            onClick={() => navigate(`/events/${event.id}`)}
         >
             <div className="surah-number">
                 <span style={{ fontSize: '0.875rem' }}>{event.years_ago || '?'}</span>
