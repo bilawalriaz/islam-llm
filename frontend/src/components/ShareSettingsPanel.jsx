@@ -15,49 +15,28 @@ export default function ShareSettingsPanel() {
     const [copied, setCopied] = useState(false);
     const [message, setMessage] = useState(null);
 
-    // Theme options with visual previews - Enhanced designs
+    // Theme options with visual previews - 3 sleek modern themes
     const themes = [
         {
             id: 'classic',
             name: 'Classic',
-            description: 'Warm sunset gradient',
-            preview: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 50%, #fed7aa 100%)',
+            description: 'Warm cream with orange accents',
+            preview: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 50%, #fde68a 100%)',
+            accent: '#f97316',
+        },
+        {
+            id: 'dark',
+            name: 'Midnight',
+            description: 'Deep slate with orange glow',
+            preview: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)',
             accent: '#f97316',
         },
         {
             id: 'nature',
             name: 'Forest',
-            description: 'Deep green with gold',
+            description: 'Emerald green with gold',
             preview: 'linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%)',
             accent: '#fbbf24',
-        },
-        {
-            id: 'dark',
-            name: 'Midnight',
-            description: 'Rich dark slate with orange',
-            preview: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)',
-            accent: '#f97316',
-        },
-        {
-            id: 'minimal',
-            name: 'Minimal',
-            description: 'Clean monochrome',
-            preview: 'linear-gradient(135deg, #fafaf9 0%, #f5f5f4 100%)',
-            accent: '#71717a',
-        },
-        {
-            id: 'ocean',
-            name: 'Ocean',
-            description: 'Calm blue gradients',
-            preview: 'linear-gradient(135deg, #0c4a6e 0%, #075985 50%, #0369a1 100%)',
-            accent: '#38bdf8',
-        },
-        {
-            id: 'royal',
-            name: 'Royal Purple',
-            description: 'Elegant purple theme',
-            preview: 'linear-gradient(135deg, #581c87 0%, #6b21a8 50%, #7e22ce 100%)',
-            accent: '#c084fc',
         },
     ];
 

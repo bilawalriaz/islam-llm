@@ -10,16 +10,17 @@ import { ScrollToTop } from './ScrollToTop';
  * Features:
  * - Responsive navigation with mobile burger menu
  * - Auth-aware header (shows different options based on auth state)
+ * - Session expired notification toast
  * - Outlet renders the current route's component
  */
 function Layout() {
-    const { user, isAuthenticated, logoutUser, loading } = useAuth();
+    const { user, isAuthenticated, logoutUser, loading, sessionExpired, dismissSessionExpired } = useAuth();
     const navigate = useNavigate();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     const handleLogout = async () => {
         await logoutUser();
-        navigate('/login');
+        navigate('/');
     };
 
     const toggleMobileMenu = () => {
@@ -164,6 +165,29 @@ function Layout() {
             <footer>
                 <p>&copy; {new Date().getFullYear()} Quran Reader.</p>
             </footer>
+
+            {/* Session Expired Toast */}
+            {sessionExpired && (
+                <div className="toast-notification toast-warning">
+                    <div className="toast-content">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        <span>Your session has expired.</span>
+                        <Link to="/login" className="toast-action" onClick={dismissSessionExpired}>
+                            Sign in
+                        </Link>
+                    </div>
+                    <button className="toast-dismiss" onClick={dismissSessionExpired} title="Dismiss">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+            )}
 
             <ScrollToTop />
         </>

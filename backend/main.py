@@ -24,7 +24,6 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from share_image import generate_ayah_image_bytes
-from embeddings import generate_embedding, search_similar
 
 # Supabase integration
 from supabase import create_client, Client
@@ -647,77 +646,6 @@ def highlight_match(text: str, query: str, language: str = 'en') -> str:
     return text
 
 
-@app.get("/api/quran/search/semantic")
-def search_quran_semantic(
-    q: str = Query(..., description="Search query text", min_length=1),
-    language: Optional[str] = Query(None, description="Filter by language: ar, en (default: en for semantic)"),
-    surah_id: Optional[int] = Query(None, description="Filter to specific surah"),
-    limit: int = Query(20, description="Max results (default: 20, max: 100)", ge=1, le=100)
-):
-    """
-    Semantic search across Quran ayahs using vector embeddings.
-    
-    Finds conceptually related verses based on meaning, not just keywords.
-    Uses all-MiniLM-L6-v2 model for embeddings.
-    """
-    # Default to English for semantic search (model is English-optimized)
-    if language is None:
-        # Detect Arabic in query
-        arabic_chars = sum(1 for c in q if '\u0600' <= c <= '\u06ff')
-        language = 'ar' if arabic_chars > len(q) * 0.3 else 'en'
-    
-    conn = get_db_connection()
-    try:
-        # Generate embedding for query
-        query_embedding = generate_embedding(q)
-        
-        # Search for similar ayahs
-        results = search_similar(
-            query_embedding,
-            conn,
-            language=language if language != 'all' else None,
-            surah_id=surah_id,
-            limit=limit
-        )
-        
-        # Format results
-        formatted_results = []
-        for r in results:
-            formatted_results.append({
-                "ayah_number": r["ayah_number"],
-                "surah_id": r["surah_id"],
-                "number_in_surah": r["number_in_surah"],
-                "surah_name": r["surah_name"],
-                "surah_english_name": r["surah_english_name"],
-                "surah_english_name_translation": r["surah_english_name_translation"],
-                "text": r["text"],
-                "highlighted_text": r["text"],  # No highlighting for semantic
-                "edition": r["edition"],
-                "language": r["language"],
-                "similarity": round(r["similarity"], 4)
-            })
-        
-        return {
-            "query": q,
-            "language": language,
-            "mode": "semantic",
-            "total_count": len(formatted_results),
-            "limit": limit,
-            "offset": 0,
-            "results": formatted_results
-        }
-    
-    except Exception as e:
-        # If embeddings not generated yet, return helpful error
-        if "ayah_embeddings" in str(e):
-            raise HTTPException(
-                status_code=503,
-                detail="Semantic search not available. Embeddings need to be generated first."
-            )
-        raise HTTPException(status_code=500, detail=str(e))
-    
-    finally:
-        conn.close()
 
 
 # =============================================================================
@@ -1797,134 +1725,125 @@ async def get_sequential_progress(current_user: dict = Depends(get_current_user)
     """
     Get true sequential progress - only count ayahs where ALL previous ayahs are complete.
     Returns first incomplete ayah and accurate completion percentage.
-
-    Automatically validates and updates sequential flags before calculating progress.
+    
+    Uses surah_id + ayah_number for tracking to avoid edition-specific ayah_id issues.
     """
     client = supabase_admin or supabase
 
-    # First, validate and update the sequential flags to ensure accuracy
-    # Get all completed ayahs
-    completed = client.table("completed_ayahs").select("ayah_id").eq("user_id", current_user["id"]).execute()
-    completed_ayah_ids = [c["ayah_id"] for c in completed.data] if completed.data else []
-
-    # DEBUG: Log what we got from Supabase
-    print(f"[SEQUENTIAL DEBUG] User {current_user['id']}: {len(completed_ayah_ids)} completed ayahs from Supabase")
-    if completed_ayah_ids:
-        print(f"[SEQUENTIAL DEBUG] First 10 ayah_ids: {completed_ayah_ids[:10]}")
-        print(f"[SEQUENTIAL DEBUG] Last 10 ayah_ids: {completed_ayah_ids[-10:]}")
-
-    if completed_ayah_ids:
-        # Get all ayahs in order to check sequential completion
-        conn = get_db_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT id, surah_id, number_in_surah
-                FROM ayahs
-                ORDER BY surah_id, number_in_surah
-            """)
-            all_ayahs = cursor.fetchall()
-
-            # DEBUG: Log SQLite ayah IDs
-            print(f"[SEQUENTIAL DEBUG] Total ayahs in SQLite: {len(all_ayahs)}")
-            print(f"[SEQUENTIAL DEBUG] First 3 SQLite ayahs: {all_ayahs[:3]}")
-
-            # Calculate which ayahs are sequential (all previous ones are complete)
-            sequential_ids = []
-            completed_set = set(completed_ayah_ids)
-
-            for i, ayah in enumerate(all_ayahs):
-                if ayah["id"] in completed_set:
-                    # Check if all previous ayahs are also complete
-                    all_previous_complete = all(a["id"] in completed_set for a in all_ayahs[:i])
-                    if all_previous_complete:
-                        sequential_ids.append(ayah["id"])
-
-            # DEBUG: Log sequential calculation results
-            print(f"[SEQUENTIAL DEBUG] Sequential ayahs found: {len(sequential_ids)}")
-            if sequential_ids:
-                print(f"[SEQUENTIAL DEBUG] Last 5 sequential IDs: {sequential_ids[-5:]}")
-
-            # Reset all sequential flags and update
-            client.table("completed_ayahs").update({"is_sequential": False}).eq("user_id", current_user["id"]).execute()
-
-            for ayah_id in sequential_ids:
-                client.table("completed_ayahs").update({"is_sequential": True}).eq("user_id", current_user["id"]).eq("ayah_id", ayah_id).execute()
-
-            sequential_count = len(sequential_ids)
-        finally:
-            conn.close()
-    else:
-        sequential_count = 0
-        print(f"[SEQUENTIAL DEBUG] No completed ayahs found for user {current_user['id']}")
-
-    # Now calculate first incomplete ayah from SQLite - the ayah at sequential_count position
+    # Get all completed ayahs with their surah_id and ayah_number
+    completed = client.table("completed_ayahs").select("surah_id, ayah_number").eq("user_id", current_user["id"]).execute()
+    
+    # Create a set of (surah_id, ayah_number) tuples for O(1) lookup
+    completed_positions = set()
+    if completed.data:
+        for c in completed.data:
+            completed_positions.add((c["surah_id"], c["ayah_number"]))
+    
+    print(f"[SEQUENTIAL DEBUG] User {current_user['id']}: {len(completed_positions)} unique completed positions")
+    
+    # Get the canonical list of all ayahs in Quran order (one per surah/ayah combo)
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        # Get the ayah at position sequential_count (0-indexed)
+        # Get distinct surah_id, number_in_surah pairs in order
         cursor.execute("""
-            SELECT surah_id, number_in_surah, number
+            SELECT DISTINCT surah_id, number_in_surah
             FROM ayahs
             ORDER BY surah_id, number_in_surah
-            LIMIT 1
-            OFFSET ?
-        """, (sequential_count,))
-        first_incomplete = cursor.fetchone()
-
-        # DEBUG: Log final result
-        print(f"[SEQUENTIAL DEBUG] Final result: sequential_count={sequential_count}, first_incomplete={first_incomplete}")
-
+        """)
+        all_positions = cursor.fetchall()
+        
+        print(f"[SEQUENTIAL DEBUG] Total unique positions in Quran: {len(all_positions)}")
+        
+        # Count sequential completions from the beginning
+        sequential_count = 0
+        first_incomplete_surah = 1
+        first_incomplete_ayah = 1
+        
+        for pos in all_positions:
+            surah_id = pos["surah_id"]
+            ayah_num = pos["number_in_surah"]
+            
+            if (surah_id, ayah_num) in completed_positions:
+                sequential_count += 1
+            else:
+                # Found the first incomplete ayah
+                first_incomplete_surah = surah_id
+                first_incomplete_ayah = ayah_num
+                break
+        else:
+            # All ayahs are complete!
+            first_incomplete_surah = 114  # Last surah
+            first_incomplete_ayah = 6     # Last ayah of last surah
+        
+        print(f"[SEQUENTIAL DEBUG] Sequential count: {sequential_count}, First incomplete: Surah {first_incomplete_surah} Ayah {first_incomplete_ayah}")
+        
         return {
             "sequential_completion_count": sequential_count,
             "sequential_percentage": round((sequential_count / 6236) * 100, 2),
-            "first_incomplete_ayah": first_incomplete["number_in_surah"] if first_incomplete else 1,
-            "first_incomplete_surah": first_incomplete["surah_id"] if first_incomplete else 1,
+            "first_incomplete_ayah": first_incomplete_ayah,
+            "first_incomplete_surah": first_incomplete_surah,
             "is_complete": sequential_count == 6236
         }
     finally:
         conn.close()
 
 
+
 @app.post("/api/progress/validate-sequential")
 async def validate_sequential_progress(current_user: dict = Depends(get_current_user)):
     """
     Recalculate sequential progress flags in Supabase.
+    Uses surah_id + ayah_number for tracking to avoid edition-specific ayah_id issues.
     """
-    # Get all completed ayahs
     client = supabase_admin or supabase
-    completed = client.table("completed_ayahs").select("ayah_id").eq("user_id", current_user["id"]).execute()
-    completed_ayah_ids = [c["ayah_id"] for c in completed.data] if completed.data else []
-
-    # Get all ayahs in order from SQLite
+    
+    # Get all completed ayahs with their surah_id and ayah_number
+    completed = client.table("completed_ayahs").select("id, surah_id, ayah_number").eq("user_id", current_user["id"]).execute()
+    
+    if not completed.data:
+        return {"success": True, "sequential_count": 0}
+    
+    # Create a set of (surah_id, ayah_number) tuples for O(1) lookup
+    # Also create a mapping from position to completion record id
+    completed_positions = {}
+    for c in completed.data:
+        pos = (c["surah_id"], c["ayah_number"])
+        completed_positions[pos] = c["id"]
+    
+    # Get the canonical list of all ayahs in Quran order
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, surah_id, number_in_surah, number
+            SELECT DISTINCT surah_id, number_in_surah
             FROM ayahs
             ORDER BY surah_id, number_in_surah
         """)
-        all_ayahs = cursor.fetchall()
-
-        # Calculate which ayahs are sequential (all previous ones are complete)
-        sequential_ids = []
-        completed_set = set(completed_ayah_ids)
-
-        for i, ayah in enumerate(all_ayahs):
-            if ayah["id"] in completed_set:
-                # Check if all previous ayahs are also complete
-                all_previous_complete = all(a["id"] in completed_set for a in all_ayahs[:i])
-                if all_previous_complete:
-                    sequential_ids.append(ayah["id"])
-
-        # Reset all sequential flags and update
+        all_positions = cursor.fetchall()
+        
+        # Find which completed positions are sequential
+        sequential_record_ids = []
+        
+        for pos in all_positions:
+            surah_id = pos["surah_id"]
+            ayah_num = pos["number_in_surah"]
+            position_key = (surah_id, ayah_num)
+            
+            if position_key in completed_positions:
+                sequential_record_ids.append(completed_positions[position_key])
+            else:
+                # Found first incomplete - stop here
+                break
+        
+        # Reset all sequential flags
         client.table("completed_ayahs").update({"is_sequential": False}).eq("user_id", current_user["id"]).execute()
-
-        for ayah_id in sequential_ids:
-            client.table("completed_ayahs").update({"is_sequential": True}).eq("user_id", current_user["id"]).eq("ayah_id", ayah_id).execute()
-
-        return {"success": True}
+        
+        # Mark sequential ones as true
+        for record_id in sequential_record_ids:
+            client.table("completed_ayahs").update({"is_sequential": True}).eq("id", record_id).execute()
+        
+        return {"success": True, "sequential_count": len(sequential_record_ids)}
     finally:
         conn.close()
 

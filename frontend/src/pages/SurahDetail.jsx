@@ -95,6 +95,7 @@ function SurahDetail() {
     const [showSurahCompletion, setShowSurahCompletion] = useState(false);
     const [showOptions, setShowOptions] = useState(false);
     const [showClearProgressConfirm, setShowClearProgressConfirm] = useState(false);
+    const [showLoginPrompt, setShowLoginPrompt] = useState(false);
     const [highlightedAyah, setHighlightedAyah] = useState(null);
     const [searchParams] = useSearchParams();
     const highlightQuery = searchParams.get('highlight');
@@ -623,8 +624,10 @@ function SurahDetail() {
 
     const handleBookmarkToggle = async (ayah) => {
         if (!isAuthenticated) {
-            // Redirect to login if not authenticated
-            navigate('/login');
+            // Show login prompt instead of redirecting
+            setShowLoginPrompt(true);
+            // Auto-dismiss after 4 seconds
+            setTimeout(() => setShowLoginPrompt(false), 4000);
             return;
         }
 
@@ -1603,6 +1606,29 @@ function SurahDetail() {
                     </p>
                 </div>
             </Modal>
+
+            {/* Login Prompt Toast */}
+            {showLoginPrompt && (
+                <div className="toast-notification toast-info">
+                    <div className="toast-content">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        <span>Sign in to bookmark ayahs and track progress.</span>
+                        <Link to="/login" className="toast-action" onClick={() => setShowLoginPrompt(false)}>
+                            Sign in
+                        </Link>
+                    </div>
+                    <button className="toast-dismiss" onClick={() => setShowLoginPrompt(false)} title="Dismiss">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+            )}
         </>
     );
 }

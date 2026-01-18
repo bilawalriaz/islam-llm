@@ -1,11 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getPublicShareStats } from '../api/client';
+import { motion } from 'framer-motion';
+import {
+    BentoGrid,
+    BentoGridItem,
+    SkeletonProgress,
+    SkeletonStreak,
+    SkeletonBook,
+    SkeletonAudio,
+    SkeletonBookmarks,
+    SkeletonCircularProgress
+} from '../components/ui/bento-grid';
 
 /**
  * SharedProfile - Public profile page for sharing Quran progress
+ * Redesigned with beautiful bento box layout
  * This page does NOT require authentication
- * Displays user stats based on their share settings
  */
 export default function SharedProfile() {
     const { shareId } = useParams();
@@ -14,55 +25,37 @@ export default function SharedProfile() {
     const [error, setError] = useState(null);
     const [isDisabled, setIsDisabled] = useState(false);
 
-    // Theme styles mapping - Enhanced with new themes
+    // Theme styles mapping - 3 sleek, modern themes
     const themeStyles = {
         classic: {
-            background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 50%, #fed7aa 100%)',
+            name: 'Classic',
+            background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 50%, #fde68a 100%)',
+            cardBg: 'rgba(255, 255, 255, 0.85)',
+            cardBorder: 'rgba(251, 191, 36, 0.2)',
             text: '#1c1917',
-            textSecondary: '#44403c',
+            textSecondary: '#57534e',
             accent: '#f97316',
-            cardBg: 'rgba(255, 255, 255, 0.9)',
-            shadow: '0 4px 6px -1px rgba(249, 115, 22, 0.15), 0 2px 4px -1px rgba(249, 115, 22, 0.1)',
-        },
-        nature: {
-            background: 'linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%)',
-            text: '#ffffff',
-            textSecondary: '#d1fae5',
-            accent: '#fbbf24',
-            cardBg: 'rgba(6, 78, 59, 0.6)',
-            shadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2)',
+            accentGlow: 'rgba(249, 115, 22, 0.3)',
         },
         dark: {
-            background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)',
-            text: '#ffffff',
+            name: 'Dark',
+            background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)',
+            cardBg: 'rgba(30, 41, 59, 0.8)',
+            cardBorder: 'rgba(249, 115, 22, 0.15)',
+            text: '#f8fafc',
             textSecondary: '#94a3b8',
             accent: '#f97316',
-            cardBg: 'rgba(30, 41, 59, 0.9)',
-            shadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2)',
+            accentGlow: 'rgba(249, 115, 22, 0.25)',
         },
-        minimal: {
-            background: 'linear-gradient(135deg, #fafaf9 0%, #f5f5f4 100%)',
-            text: '#1c1917',
-            textSecondary: '#44403c',
-            accent: '#71717a',
-            cardBg: '#ffffff',
-            shadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
-        },
-        ocean: {
-            background: 'linear-gradient(135deg, #0c4a6e 0%, #075985 50%, #0369a1 100%)',
-            text: '#ffffff',
-            textSecondary: '#bae6fd',
-            accent: '#38bdf8',
-            cardBg: 'rgba(12, 74, 110, 0.6)',
-            shadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2)',
-        },
-        royal: {
-            background: 'linear-gradient(135deg, #581c87 0%, #6b21a8 50%, #7e22ce 100%)',
-            text: '#ffffff',
-            textSecondary: '#e9d5ff',
-            accent: '#c084fc',
-            cardBg: 'rgba(88, 28, 135, 0.6)',
-            shadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2)',
+        nature: {
+            name: 'Nature',
+            background: 'linear-gradient(135deg, #064e3b 0%, #065f46 30%, #047857 70%, #064e3b 100%)',
+            cardBg: 'rgba(6, 78, 59, 0.75)',
+            cardBorder: 'rgba(251, 191, 36, 0.2)',
+            text: '#ecfdf5',
+            textSecondary: '#a7f3d0',
+            accent: '#fbbf24',
+            accentGlow: 'rgba(251, 191, 36, 0.3)',
         },
     };
 
@@ -111,7 +104,11 @@ export default function SharedProfile() {
     if (loading) {
         return (
             <div style={styles.loadingContainer}>
-                <div style={styles.spinner}></div>
+                <motion.div
+                    style={styles.spinner}
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                />
                 <p style={{ marginTop: '20px', color: '#64748b' }}>Loading profile...</p>
             </div>
         );
@@ -126,12 +123,16 @@ export default function SharedProfile() {
                 minHeight: '100vh',
             }}>
                 <div style={styles.content}>
-                    <div style={{
-                        ...styles.card,
-                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                        textAlign: 'center',
-                        padding: '60px 40px',
-                    }}>
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        style={{
+                            ...styles.errorCard,
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                            textAlign: 'center',
+                            padding: '60px 40px',
+                        }}
+                    >
                         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5" style={{ marginBottom: '24px' }}>
                             <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
@@ -145,7 +146,7 @@ export default function SharedProfile() {
                         <Link to="/" style={styles.ctaButton}>
                             Start Your Own Quran Journey
                         </Link>
-                    </div>
+                    </motion.div>
                 </div>
             </div>
         );
@@ -169,156 +170,267 @@ export default function SharedProfile() {
         return null;
     }
 
-    const theme = themeStyles[profile.theme] || themeStyles.classic;
+    // Get theme, default to classic if theme not found
+    const themeKey = themeStyles[profile.theme] ? profile.theme : 'classic';
+    const theme = themeStyles[themeKey];
     const stats = profile.stats || {};
+
+    // Build bento grid items based on available stats
+    const bentoItems = [];
+
+    // Header card (always shown) - spans 2 columns
+    bentoItems.push({
+        id: 'header',
+        colSpan: 2,
+        content: (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '100%' }}>
+                <div>
+                    <motion.h1
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        style={{
+                            margin: 0,
+                            fontSize: '36px',
+                            fontWeight: '700',
+                            color: theme.text,
+                            marginBottom: '8px'
+                        }}
+                    >
+                        {profile.user.name || 'Quran Reader'}
+                    </motion.h1>
+                    <motion.p
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.2 }}
+                        style={{
+                            margin: 0,
+                            fontSize: '18px',
+                            color: theme.textSecondary
+                        }}
+                    >
+                        Quran Journey
+                    </motion.p>
+                </div>
+                {stats.completion && (
+                    <SkeletonCircularProgress
+                        percent={stats.completion.completion_percentage || 0}
+                        color={theme.accent}
+                        size={100}
+                    />
+                )}
+            </div>
+        ),
+    });
+
+    // Completion/Ayahs card
+    if (stats.completion) {
+        bentoItems.push({
+            id: 'ayahs',
+            colSpan: 1,
+            icon: (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={theme.accent} strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 6v6l4 2" />
+                </svg>
+            ),
+            title: 'Ayahs Completed',
+            value: stats.completion.ayahs_completed?.toLocaleString() || 0,
+            subtitle: 'of 6,236 total',
+            header: <SkeletonProgress color={theme.accent} />,
+        });
+    }
+
+    // Surahs read
+    if (stats.reading) {
+        bentoItems.push({
+            id: 'surahs',
+            colSpan: 1,
+            icon: (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={theme.accent} strokeWidth="2">
+                    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                </svg>
+            ),
+            title: 'Surahs Read',
+            value: stats.reading.total_surahs_read || 0,
+            subtitle: 'of 114 total',
+            header: <SkeletonBook color={theme.accent} />,
+        });
+    }
+
+    // Streak
+    if (stats.streak !== undefined) {
+        bentoItems.push({
+            id: 'streak',
+            colSpan: 1,
+            icon: (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill={theme.accent}>
+                    <path d="M12 2C12 2 4 9 4 14C4 17.5 7.5 21 12 21C16.5 21 20 17.5 20 14C20 9 12 2 12 2Z" />
+                </svg>
+            ),
+            title: 'Day Streak',
+            value: stats.streak,
+            subtitle: stats.streak === 1 ? 'day' : 'days',
+            header: <SkeletonStreak color={theme.accent} />,
+        });
+    }
+
+    // Bookmarks
+    if (stats.bookmarks !== undefined) {
+        bentoItems.push({
+            id: 'bookmarks',
+            colSpan: 1,
+            icon: (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={theme.accent} strokeWidth="2">
+                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                </svg>
+            ),
+            title: 'Bookmarks',
+            value: stats.bookmarks,
+            subtitle: 'saved verses',
+            header: <SkeletonBookmarks color={theme.accent} />,
+        });
+    }
+
+    // Listening stats (spans 2 columns if both available)
+    if (stats.listening) {
+        bentoItems.push({
+            id: 'listening',
+            colSpan: 2,
+            icon: (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={theme.accent} strokeWidth="2">
+                    <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+                    <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+                </svg>
+            ),
+            title: 'Listening',
+            header: <SkeletonAudio color={theme.accent} />,
+            customContent: (
+                <div style={{ display: 'flex', gap: '32px', marginTop: '16px' }}>
+                    <div>
+                        <div style={{ fontSize: '28px', fontWeight: '700', color: theme.text }}>
+                            {stats.listening.total_plays?.toLocaleString() || 0}
+                        </div>
+                        <div style={{ fontSize: '14px', color: theme.textSecondary }}>Total Plays</div>
+                    </div>
+                    <div>
+                        <div style={{ fontSize: '28px', fontWeight: '700', color: theme.text }}>
+                            {stats.listening.total_minutes?.toLocaleString() || 0}
+                        </div>
+                        <div style={{ fontSize: '14px', color: theme.textSecondary }}>Minutes</div>
+                    </div>
+                </div>
+            ),
+        });
+    }
 
     return (
         <div style={{ ...styles.container, background: theme.background, minHeight: '100vh' }}>
             <div style={styles.content}>
-                {/* Header Card */}
-                <div style={{ ...styles.headerCard, backgroundColor: theme.cardBg, color: theme.text, boxShadow: theme.shadow }}>
-                    <div style={styles.headerLeft}>
-                        <h1 style={{ ...styles.userName, color: theme.text }}>
-                            {profile.user.name || 'Quran Reader'}
-                        </h1>
-                        <p style={{ ...styles.subtitle, color: theme.textSecondary }}>
-                            Quran Journey
-                        </p>
-                    </div>
-
-                    {/* Completion Badge */}
-                    {stats.completion && (
-                        <div style={{ ...styles.completionBadge, backgroundColor: theme.accent }}>
-                            <span style={styles.completionPercentage}>
-                                {stats.completion.completion_percentage}%
-                            </span>
-                            <span style={styles.completionLabel}>Complete</span>
-                        </div>
-                    )}
-                </div>
-
-                {/* Stats Grid */}
-                <div style={styles.statsGrid}>
-                    {/* Reading Progress Stats */}
-                    {(stats.reading || stats.completion) && (
-                        <>
-                            {stats.completion && (
-                                <div style={{ ...styles.statCard, backgroundColor: theme.cardBg, boxShadow: theme.shadow }}>
-                                    <div style={{ ...styles.statIcon, color: theme.accent }}>
-                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <circle cx="12" cy="12" r="10" />
-                                            <path d="M12 6v6l4 2" />
-                                        </svg>
-                                    </div>
-                                    <div style={styles.statContent}>
-                                        <p style={{ ...styles.statValue, color: theme.text }}>
-                                            {stats.completion.ayahs_completed?.toLocaleString() || 0}
-                                        </p>
-                                        <p style={{ ...styles.statLabel, color: theme.textSecondary }}>
-                                            Ayahs Completed
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-
-                            {stats.reading && (
-                                <div style={{ ...styles.statCard, backgroundColor: theme.cardBg, boxShadow: theme.shadow }}>
-                                    <div style={{ ...styles.statIcon, color: theme.accent }}>
-                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-                                            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-                                        </svg>
-                                    </div>
-                                    <div style={styles.statContent}>
-                                        <p style={{ ...styles.statValue, color: theme.text }}>
-                                            {stats.reading.total_surahs_read || 0}
-                                        </p>
-                                        <p style={{ ...styles.statLabel, color: theme.textSecondary }}>
-                                            Surahs Read
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-
-                            {stats.streak !== undefined && (
-                                <div style={{ ...styles.statCard, backgroundColor: theme.cardBg, boxShadow: theme.shadow }}>
-                                    <div style={{ ...styles.statIcon, color: theme.accent }}>
-                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3.5 4 4 6.5.5-2.5 1.5-5 2-6.5a6 6 0 0 0-2-4c-1-1-2-2-2-4a2.5 2.5 0 0 0 5 0" />
-                                        </svg>
-                                    </div>
-                                    <div style={styles.statContent}>
-                                        <p style={{ ...styles.statValue, color: theme.text }}>
-                                            {stats.streak}
-                                        </p>
-                                        <p style={{ ...styles.statLabel, color: theme.textSecondary }}>
-                                            Day Streak
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-
-                            {stats.bookmarks !== undefined && (
-                                <div style={{ ...styles.statCard, backgroundColor: theme.cardBg, boxShadow: theme.shadow }}>
-                                    <div style={{ ...styles.statIcon, color: theme.accent }}>
-                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                                        </svg>
-                                    </div>
-                                    <div style={styles.statContent}>
-                                        <p style={{ ...styles.statValue, color: theme.text }}>
-                                            {stats.bookmarks}
-                                        </p>
-                                        <p style={{ ...styles.statLabel, color: theme.textSecondary }}>
-                                            Bookmarks
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-
-                            {stats.listening && (
+                {/* Bento Grid */}
+                <div className="shared-profile-bento" style={styles.bentoGrid}>
+                    {bentoItems.map((item, index) => (
+                        <motion.div
+                            key={item.id}
+                            initial={{ opacity: 0, y: 30 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.5, delay: index * 0.1 }}
+                            whileHover={{
+                                scale: 1.02,
+                                boxShadow: `0 20px 40px -15px ${theme.accentGlow}`,
+                            }}
+                            style={{
+                                gridColumn: `span ${item.colSpan}`,
+                                backgroundColor: theme.cardBg,
+                                backdropFilter: 'blur(20px)',
+                                WebkitBackdropFilter: 'blur(20px)',
+                                borderRadius: '24px',
+                                padding: '24px',
+                                border: `1px solid ${theme.cardBorder}`,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                minHeight: item.colSpan === 2 ? '160px' : '200px',
+                                transition: 'all 0.3s ease',
+                            }}
+                        >
+                            {/* Special header card */}
+                            {item.id === 'header' ? (
+                                item.content
+                            ) : (
                                 <>
-                                    <div style={{ ...styles.statCard, backgroundColor: theme.cardBg, boxShadow: theme.shadow }}>
-                                        <div style={{ ...styles.statIcon, color: theme.accent }}>
-                                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                                <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
-                                                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
-                                            </svg>
+                                    {/* Animated header/visual */}
+                                    {item.header && (
+                                        <div style={{
+                                            flex: 1,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            minHeight: '80px',
+                                        }}>
+                                            {item.header}
                                         </div>
-                                        <div style={styles.statContent}>
-                                            <p style={{ ...styles.statValue, color: theme.text }}>
-                                                {stats.listening.total_plays?.toLocaleString() || 0}
-                                            </p>
-                                            <p style={{ ...styles.statLabel, color: theme.textSecondary }}>
-                                            Total Plays
-                                            </p>
-                                        </div>
-                                    </div>
+                                    )}
 
-                                    <div style={{ ...styles.statCard, backgroundColor: theme.cardBg, boxShadow: theme.shadow }}>
-                                        <div style={{ ...styles.statIcon, color: theme.accent }}>
-                                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                                <circle cx="12" cy="12" r="10" />
-                                                <polyline points="12,6 12,12 16,14" />
-                                            </svg>
-                                        </div>
-                                        <div style={styles.statContent}>
-                                            <p style={{ ...styles.statValue, color: theme.text }}>
-                                                {stats.listening.total_minutes?.toLocaleString() || 0}
-                                            </p>
-                                            <p style={{ ...styles.statLabel, color: theme.textSecondary }}>
-                                                Minutes Listened
-                                            </p>
-                                        </div>
+                                    {/* Content */}
+                                    <div style={{ marginTop: 'auto' }}>
+                                        {item.icon && (
+                                            <div style={{ marginBottom: '8px' }}>
+                                                {item.icon}
+                                            </div>
+                                        )}
+
+                                        {item.value !== undefined && !item.customContent && (
+                                            <div style={{
+                                                fontSize: '32px',
+                                                fontWeight: '700',
+                                                color: theme.text,
+                                                lineHeight: 1,
+                                            }}>
+                                                {item.value}
+                                            </div>
+                                        )}
+
+                                        {item.title && (
+                                            <div style={{
+                                                fontSize: '16px',
+                                                fontWeight: '600',
+                                                color: theme.text,
+                                                marginTop: '4px',
+                                            }}>
+                                                {item.title}
+                                            </div>
+                                        )}
+
+                                        {item.subtitle && !item.customContent && (
+                                            <div style={{
+                                                fontSize: '14px',
+                                                color: theme.textSecondary,
+                                            }}>
+                                                {item.subtitle}
+                                            </div>
+                                        )}
+
+                                        {item.customContent}
                                     </div>
                                 </>
                             )}
-                        </>
-                    )}
+                        </motion.div>
+                    ))}
                 </div>
 
                 {/* Call to Action */}
-                <div style={{ ...styles.ctaCard, backgroundColor: theme.cardBg, boxShadow: theme.shadow }}>
+                <motion.div
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.6 }}
+                    style={{
+                        ...styles.ctaCard,
+                        backgroundColor: theme.cardBg,
+                        backdropFilter: 'blur(20px)',
+                        WebkitBackdropFilter: 'blur(20px)',
+                        border: `1px solid ${theme.cardBorder}`,
+                    }}
+                >
                     <h3 style={{ ...styles.ctaTitle, color: theme.text }}>Start Your Quran Journey</h3>
                     <p style={{ ...styles.ctaDescription, color: theme.textSecondary }}>
                         Track your reading progress, listen to beautiful recitations, and bookmark your favorite verses.
@@ -326,10 +438,10 @@ export default function SharedProfile() {
                     <Link to="/" style={{ ...styles.ctaButton, backgroundColor: theme.accent }}>
                         Get Started Free
                     </Link>
-                    <p style={styles.footerText}>
+                    <p style={{ ...styles.footerText, color: theme.textSecondary }}>
                         Powered by <a href="https://quran.hyperflash.uk" style={{ color: theme.accent, textDecoration: 'none' }}>Quran Reader</a>
                     </p>
-                </div>
+                </motion.div>
             </div>
         </div>
     );
@@ -344,80 +456,43 @@ const styles = {
     },
     content: {
         width: '100%',
-        maxWidth: '800px',
+        maxWidth: '900px',
     },
-    headerCard: {
-        borderRadius: '24px',
-        padding: '40px',
+    bentoGrid: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: '16px',
         marginBottom: '32px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
     },
-    headerLeft: {
-        flex: 1,
-    },
-    userName: {
-        fontSize: '36px',
-        fontWeight: '700',
-        margin: 0,
-        marginBottom: '8px',
-    },
-    subtitle: {
-        fontSize: '18px',
-        margin: 0,
-    },
-    completionBadge: {
+    loadingContainer: {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: '16px',
-        padding: '20px 30px',
-        minWidth: '120px',
+        minHeight: '50vh',
     },
-    completionPercentage: {
-        fontSize: '42px',
-        fontWeight: '700',
-        color: '#ffffff',
-        lineHeight: 1,
+    spinner: {
+        width: '40px',
+        height: '40px',
+        border: '3px solid #e2e8f0',
+        borderTopColor: '#f97316',
+        borderRadius: '50%',
     },
-    completionLabel: {
-        fontSize: '14px',
-        color: 'rgba(255, 255, 255, 0.8)',
-        marginTop: '4px',
-    },
-    statsGrid: {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-        gap: '16px',
-        marginBottom: '32px',
-    },
-    statCard: {
-        borderRadius: '16px',
-        padding: '24px',
+    errorContainer: {
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
-        gap: '16px',
+        justifyContent: 'center',
+        minHeight: '50vh',
+        textAlign: 'center',
+        padding: '20px',
     },
-    statIcon: {
-        flexShrink: 0,
-    },
-    statContent: {
-        flex: 1,
-    },
-    statValue: {
-        fontSize: '32px',
-        fontWeight: '700',
-        margin: 0,
-        lineHeight: 1,
-    },
-    statLabel: {
-        fontSize: '14px',
-        margin: '4px 0 0 0',
+    errorCard: {
+        borderRadius: '24px',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
     },
     ctaCard: {
-        borderRadius: '20px',
+        borderRadius: '24px',
         padding: '40px',
         textAlign: 'center',
     },
@@ -443,48 +518,29 @@ const styles = {
     },
     footerText: {
         fontSize: '14px',
-        color: '#64748b',
         marginTop: '24px',
         marginBottom: 0,
     },
-    card: {
-        backgroundColor: '#ffffff',
-        borderRadius: '16px',
-        padding: '24px',
-        marginBottom: '24px',
-        border: '1px solid #e2e8f0',
-    },
-    loadingContainer: {
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '50vh',
-    },
-    spinner: {
-        width: '40px',
-        height: '40px',
-        border: '3px solid #e2e8f0',
-        borderTopColor: '#f97316',
-        borderRadius: '50%',
-        animation: 'spin 1s linear infinite',
-    },
-    errorContainer: {
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '50vh',
-        textAlign: 'center',
-        padding: '20px',
-    },
 };
 
-// Add keyframe animation for spinner
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes spin {
-        to { transform: rotate(360deg); }
+// Add responsive styles via CSS
+const responsiveStyles = document.createElement('style');
+responsiveStyles.textContent = `
+    @media (max-width: 768px) {
+        .shared-profile-bento {
+            grid-template-columns: repeat(2, 1fr) !important;
+        }
+    }
+    @media (max-width: 480px) {
+        .shared-profile-bento {
+            grid-template-columns: 1fr !important;
+        }
+        .shared-profile-bento > div {
+            grid-column: span 1 !important;
+        }
     }
 `;
-document.head.appendChild(style);
+if (!document.getElementById('shared-profile-responsive')) {
+    responsiveStyles.id = 'shared-profile-responsive';
+    document.head.appendChild(responsiveStyles);
+}

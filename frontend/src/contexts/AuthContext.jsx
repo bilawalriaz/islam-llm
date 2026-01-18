@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { login, logout, getCurrentUser, isAuthenticated as checkAuth } from '../api/client';
 
 const AuthContext = createContext(null);
@@ -11,14 +11,28 @@ const AuthContext = createContext(null);
  * - loading: Loading state during auth checks
  * - error: Error message from auth operations
  * - isAuthenticated: Boolean indicating if user is logged in
+ * - sessionExpired: Whether the session has expired (for showing notification)
  * - loginUser: Function to log in with email/password
  * - logoutUser: Function to log out
  * - refreshUser: Function to refresh user data from server
+ * - dismissSessionExpired: Function to dismiss the session expired notification
  */
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [sessionExpired, setSessionExpired] = useState(false);
+
+    // Listen for session-expired events from API client
+    useEffect(() => {
+        const handleSessionExpired = () => {
+            setUser(null);
+            setSessionExpired(true);
+        };
+
+        window.addEventListener('session-expired', handleSessionExpired);
+        return () => window.removeEventListener('session-expired', handleSessionExpired);
+    }, []);
 
     // Load user on mount if authenticated
     useEffect(() => {
@@ -30,6 +44,7 @@ export function AuthProvider({ children }) {
                 } catch (err) {
                     console.error('Failed to load user:', err);
                     setUser(null);
+                    // Don't show session expired on initial load - just silently clear
                 }
             }
             setLoading(false);
@@ -40,6 +55,7 @@ export function AuthProvider({ children }) {
 
     const loginUser = async (email, password) => {
         setError(null);
+        setSessionExpired(false); // Clear any expired message on login attempt
         try {
             const data = await login(email, password);
             setUser(data.user);
@@ -58,6 +74,7 @@ export function AuthProvider({ children }) {
             console.error('Logout error:', err);
         } finally {
             setUser(null);
+            setSessionExpired(false);
         }
     };
 
@@ -73,14 +90,20 @@ export function AuthProvider({ children }) {
         }
     };
 
+    const dismissSessionExpired = useCallback(() => {
+        setSessionExpired(false);
+    }, []);
+
     const value = {
         user,
         loading,
         error,
         isAuthenticated: !!user,
+        sessionExpired,
         loginUser,
         logoutUser,
         refreshUser,
+        dismissSessionExpired,
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -90,7 +113,7 @@ export function AuthProvider({ children }) {
  * useAuth - Hook to access auth context
  *
  * Usage:
- *   const { user, isAuthenticated, loginUser, logoutUser } = useAuth();
+ *   const { user, isAuthenticated, loginUser, logoutUser, sessionExpired } = useAuth();
  */
 export function useAuth() {
     const context = useContext(AuthContext);

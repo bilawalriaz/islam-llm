@@ -45,14 +45,14 @@ async function fetchAPI(endpoint, options = {}) {
         ...options,
     });
 
-    // Handle 401 Unauthorized - clear session and redirect to login
+    // Handle 401 Unauthorized - clear session and notify (don't redirect)
     if (response.status === 401) {
         clearSession();
-        // Only redirect if we're not already on auth pages
-        if (!window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/register')) {
-            window.location.href = '/login';
-        }
-        throw new Error('Authentication required. Please login.');
+        // Dispatch a custom event for session expiry - AuthContext will handle notification
+        window.dispatchEvent(new CustomEvent('session-expired'));
+        const error = new Error('Your session has expired. Please sign in again.');
+        error.code = 'SESSION_EXPIRED';
+        throw error;
     }
 
     if (!response.ok) {
