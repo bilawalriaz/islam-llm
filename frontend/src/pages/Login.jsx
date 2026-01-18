@@ -79,6 +79,9 @@ function Login() {
                 <div className="auth-card">
                     <h1>Welcome Back</h1>
                     <p>Sign in to your account to continue</p>
+                    <p className="text-muted small" style={{ marginBottom: '1.5rem', fontStyle: 'italic' }}>
+                        Your journey is private. No ads, no tracking, ever.
+                    </p>
 
                     {error && (
                         <div className="alert alert-error">

@@ -96,6 +96,8 @@ function SurahDetail() {
     const [showOptions, setShowOptions] = useState(false);
     const [showClearProgressConfirm, setShowClearProgressConfirm] = useState(false);
     const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+    const [pendingAyahInfo, setPendingAyahInfo] = useState(null);
+    const [showBookmarkSuccess, setShowBookmarkSuccess] = useState(false);
     const [highlightedAyah, setHighlightedAyah] = useState(null);
     const [searchParams] = useSearchParams();
     const highlightQuery = searchParams.get('highlight');
@@ -145,10 +147,10 @@ function SurahDetail() {
     });
     const readingProgressSaveTimeoutRef = useRef(null);
 
-    // Simplified reciter options (only Mishary Alafasy and Ibrahim Walk)
+    // Simplified reciter options
     const simplifiedReciters = [
-        { identifier: 'ar.alafasy', name: 'Alafasy' },
-        { identifier: 'en.walk', name: 'I. Walk' },
+        { identifier: 'ar.alafasy', name: 'Arabic' },
+        { identifier: 'en.walk', name: 'English' },
     ];
 
     useEffect(() => {
@@ -218,6 +220,8 @@ function SurahDetail() {
                         const targetAyah = ayahs.find(a => a.id === ayahId);
                         if (targetAyah && !bookmarks[targetAyah.id]) {
                             handleBookmarkToggle(targetAyah);
+                            setShowBookmarkSuccess(true);
+                            setTimeout(() => setShowBookmarkSuccess(false), 4000);
                         }
                     }
                 } catch (e) {
@@ -227,7 +231,7 @@ function SurahDetail() {
                 }
             }
         }
-    }, [isAuthenticated, ayahs.length, id]);
+    }, [isAuthenticated, ayahs.length, id, bookmarks]);
 
     // Handle scrolling to a specific ayah based on URL hash (e.g., #ayah-7)
     useEffect(() => {
@@ -672,6 +676,7 @@ function SurahDetail() {
                 timestamp: Date.now()
             };
             sessionStorage.setItem('pendingBookmark', JSON.stringify(pendingBookmark));
+            setPendingAyahInfo(pendingBookmark);
             setShowLoginPrompt(true);
             return;
         }
@@ -1384,9 +1389,14 @@ function SurahDetail() {
             <div className={`floating-progress ${showFloatingProgress ? 'visible' : ''}`}>
                 <div className="floating-progress-content">
                     <div className="floating-progress-info">
-                        <span className="floating-progress-label">
-                            Ayah {playingAyah !== null ? ayahs[playingAyah]?.number_in_surah : (ayahs[lastPlayedIndex]?.number_in_surah || '-')} of {ayahs.length}
-                        </span>
+                        <div className="floating-progress-titles">
+                            <span className="floating-progress-surah-ar">{surah?.name}</span>
+                            <span className="floating-progress-surah-en">{surah?.englishName}</span>
+                            <div className="floating-progress-dot" />
+                            <span className="floating-progress-label">
+                                Ayah {playingAyah !== null ? ayahs[playingAyah]?.number_in_surah : (ayahs[lastPlayedIndex]?.number_in_surah || '-')} of {ayahs.length}
+                            </span>
+                        </div>
                         {completionStats && (
                             <div className="floating-progress-bar">
                                 <div
@@ -1490,68 +1500,70 @@ function SurahDetail() {
                             {playbackSpeed}x
                         </button>
 
-                        {/* Volume Control */}
-                        <div className="floating-progress-volume">
-                            <button
-                                className="btn-icon-floating"
-                                onClick={() => setVolume(v => v === 0 ? 1 : 0)}
-                                title={volume === 0 ? 'Unmute' : 'Mute'}
-                            >
-                                {volume === 0 ? (
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                        <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
-                                    </svg>
-                                ) : (
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-                                    </svg>
-                                )}
-                            </button>
-                            <input
-                                type="range"
-                                min="0"
-                                max="1"
-                                step="0.1"
-                                value={volume}
-                                onChange={(e) => setVolume(parseFloat(e.target.value))}
-                                className="volume-slider"
-                                title="Volume"
-                            />
-                        </div>
+                        {/* Audio Settings (Stacked Volume + Reciter) */}
+                        <div className="floating-progress-settings">
+                            {/* Volume Control */}
+                            <div className="floating-progress-volume">
+                                <button
+                                    className="btn-icon-floating"
+                                    onClick={() => setVolume(v => v === 0 ? 1 : 0)}
+                                    title={volume === 0 ? 'Unmute' : 'Mute'}
+                                >
+                                    {volume === 0 ? (
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+                                        </svg>
+                                    ) : (
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+                                        </svg>
+                                    )}
+                                </button>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="1"
+                                    step="0.1"
+                                    value={volume}
+                                    onChange={(e) => setVolume(parseFloat(e.target.value))}
+                                    className="volume-slider"
+                                    title="Volume"
+                                />
+                            </div>
 
-                        {/* Reciter Selector */}
-                        <select
-                            className="reciter-select-floating"
-                            value={selectedAudioEdition}
-                            onChange={(e) => {
-                                // Save current playing state (both playing and paused)
-                                const wasPlaying = playingAyah !== null;
-                                const currentAyahIndex = playingAyah !== null
-                                    ? playingAyah
-                                    : lastPlayingAyahRef.current;
-                                const newEdition = e.target.value;
+                            {/* Reciter Selector */}
+                            <select
+                                className="reciter-select-floating"
+                                value={selectedAudioEdition}
+                                onChange={(e) => {
+                                    // Save current playing state (both playing and paused)
+                                    const wasPlaying = playingAyah !== null;
+                                    const currentAyahIndex = playingAyah !== null
+                                        ? playingAyah
+                                        : lastPlayingAyahRef.current;
+                                    const newEdition = e.target.value;
 
-                                // Change reciter
-                                setSelectedAudioEdition(newEdition);
+                                    // Change reciter
+                                    setSelectedAudioEdition(newEdition);
 
-                                // If something was playing or paused, restart from the same ayah with new reciter
-                                if (currentAyahIndex !== null && currentAyahIndex !== undefined) {
-                                    // Pass new edition directly to avoid race condition
-                                    playAyah(currentAyahIndex, newEdition);
-                                    // If it wasn't playing before, pause it after starting
-                                    if (!wasPlaying) {
-                                        pauseAyah();
+                                    // If something was playing or paused, restart from the same ayah with new reciter
+                                    if (currentAyahIndex !== null && currentAyahIndex !== undefined) {
+                                        // Pass new edition directly to avoid race condition
+                                        playAyah(currentAyahIndex, newEdition);
+                                        // If it wasn't playing before, pause it after starting
+                                        if (!wasPlaying) {
+                                            pauseAyah();
+                                        }
                                     }
-                                }
-                            }}
-                            title="Reciter"
-                        >
-                            {simplifiedReciters.map(reciter => (
-                                <option key={reciter.identifier} value={reciter.identifier}>
-                                    {reciter.name}
-                                </option>
-                            ))}
-                        </select>
+                                }}
+                            >
+                                {simplifiedReciters.map(reciter => (
+                                    <option key={reciter.identifier} value={reciter.identifier}>
+                                        {reciter.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1668,7 +1680,7 @@ function SurahDetail() {
                             Cancel
                         </Button>
                         <Link
-                            to={`/login?redirect=${encodeURIComponent(location.pathname + location.hash)}`}
+                            to={`/login?redirect=${encodeURIComponent(location.pathname + '#ayah-' + (pendingAyahInfo?.ayahNumber || ''))}`}
                             className="btn btn-primary flex-1 text-center"
                             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                         >
@@ -1679,7 +1691,7 @@ function SurahDetail() {
             >
                 <div style={{ textAlign: 'center', padding: '10px 0' }}>
                     <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🔖</div>
-                    <p style={{ marginBottom: '8px', fontWeight: '600' }}>Want to save this ayah?</p>
+                    <p style={{ marginBottom: '8px', fontWeight: '600' }}>Want to save Ayah {pendingAyahInfo?.ayahNumber}?</p>
                     <p className="text-muted small">
                         Create a free account or sign in to bookmark ayahs, track your reading progress, and sync across devices.
                     </p>
@@ -1688,6 +1700,25 @@ function SurahDetail() {
                     </p>
                 </div>
             </Modal>
+
+            {/* Bookmark Success Toast */}
+            {showBookmarkSuccess && (
+                <div className="toast-notification toast-success">
+                    <div className="toast-content">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        <span>Ayah bookmarked successfully!</span>
+                    </div>
+                    <button className="toast-dismiss" onClick={() => setShowBookmarkSuccess(false)}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+            )}
         </>
     );
 }
