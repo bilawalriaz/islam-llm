@@ -1,5 +1,125 @@
 const API_BASE = '/api';
 
+// =============================================================================
+// SIMPLE CACHE LAYER - Reduces API calls for rarely-changing data
+// =============================================================================
+
+const cache = new Map();
+const CACHE_TTL = {
+    SHORT: 2 * 60 * 1000,      // 2 minutes - for frequently changing data
+    MEDIUM: 5 * 60 * 1000,     // 5 minutes - for user progress
+    LONG: 30 * 60 * 1000,      // 30 minutes - for static data like surahs
+};
+
+/**
+ * Generate cache key for endpoint and params
+ */
+function getCacheKey(endpoint, options = {}) {
+    const params = options.body ? JSON.stringify(options.body) : '';
+    return `${endpoint}:${params}`;
+}
+
+/**
+ * Get cached data if valid and not expired
+ */
+function getCached(key, ttl = CACHE_TTL.MEDIUM) {
+    const cached = cache.get(key);
+    if (!cached) return null;
+
+    const now = Date.now();
+    if (now - cached.timestamp > ttl) {
+        cache.delete(key);
+        return null;
+    }
+
+    return cached.data;
+}
+
+/**
+ * Set cached data with timestamp
+ */
+function setCached(key, data) {
+    cache.set(key, {
+        data,
+        timestamp: Date.now(),
+    });
+}
+
+/**
+ * Clear all cache (call after logout or data updates)
+ */
+export function clearCache() {
+    cache.clear();
+}
+
+/**
+ * Clear specific cache key pattern (call after specific updates)
+ */
+export function clearCachePattern(pattern) {
+    for (const key of cache.keys()) {
+        if (key.includes(pattern)) {
+            cache.delete(key);
+        }
+    }
+}
+
+/**
+ * Generic fetch wrapper with error handling, auth, and caching
+ */
+async function fetchAPI(endpoint, options = {}, cacheTTL = null) {
+    const token = localStorage.getItem('session_token');
+
+    // Check cache for GET requests
+    if (cacheTTL && (!options.method || options.method === 'GET')) {
+        const cacheKey = getCacheKey(endpoint, options);
+        const cached = getCached(cacheKey, cacheTTL);
+        if (cached) {
+            return cached;
+        }
+    }
+
+    const headers = {
+        'Content-Type': 'application/json',
+        ...options.headers,
+    };
+
+    // Add auth header if token exists
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+        headers,
+        ...options,
+    });
+
+    // Handle 401 Unauthorized - clear session and notify (don't redirect)
+    if (response.status === 401) {
+        clearCache();
+        localStorage.removeItem('session_token');
+        // Dispatch a custom event for session expiry - AuthContext will handle notification
+        window.dispatchEvent(new CustomEvent('session-expired'));
+        const error = new Error('Your session has expired. Please sign in again.');
+        error.code = 'SESSION_EXPIRED';
+        throw error;
+    }
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(error.error || 'Request failed');
+    }
+
+    const data = await response.json();
+
+    // Cache successful GET requests
+    if (cacheTTL && (!options.method || options.method === 'GET')) {
+        const cacheKey = getCacheKey(endpoint, options);
+        setCached(cacheKey, data);
+    }
+
+    return data;
+}
+
 /**
  * Get stored session token from localStorage
  */
@@ -23,44 +143,6 @@ function setSessionToken(token) {
  */
 function clearSession() {
     localStorage.removeItem('session_token');
-}
-
-/**
- * Generic fetch wrapper with error handling and auth
- */
-async function fetchAPI(endpoint, options = {}) {
-    const token = getSessionToken();
-    const headers = {
-        'Content-Type': 'application/json',
-        ...options.headers,
-    };
-
-    // Add auth header if token exists
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-        headers,
-        ...options,
-    });
-
-    // Handle 401 Unauthorized - clear session and notify (don't redirect)
-    if (response.status === 401) {
-        clearSession();
-        // Dispatch a custom event for session expiry - AuthContext will handle notification
-        window.dispatchEvent(new CustomEvent('session-expired'));
-        const error = new Error('Your session has expired. Please sign in again.');
-        error.code = 'SESSION_EXPIRED';
-        throw error;
-    }
-
-    if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Request failed' }));
-        throw new Error(error.error || 'Request failed');
-    }
-
-    return response.json();
 }
 
 // =============================================================================
@@ -212,9 +294,10 @@ export function getGoogleAuthUrl() {
 
 /**
  * Get all surahs (chapters)
+ * Cached for 30 minutes - surah data rarely changes
  */
 export async function getSurahs() {
-    return fetchAPI('/quran/surahs');
+    return fetchAPI('/quran/surahs', {}, CACHE_TTL.LONG);
 }
 
 /**
@@ -266,16 +349,18 @@ export async function searchQuran(query, options = {}) {
 
 /**
  * Get all bookmarks for the current user
+ * Cached for 2 minutes - bookmarks change when user adds/removes
  */
 export async function getBookmarks() {
-    return fetchAPI('/bookmarks');
+    return fetchAPI('/bookmarks', {}, CACHE_TTL.SHORT);
 }
 
 /**
  * Create a new bookmark
+ * Clears bookmarks cache after creation
  */
 export async function createBookmark(ayahId, surahId, ayahNumberInSurah) {
-    return fetchAPI('/bookmarks', {
+    const result = await fetchAPI('/bookmarks', {
         method: 'POST',
         body: JSON.stringify({
             ayah_id: ayahId,
@@ -283,15 +368,30 @@ export async function createBookmark(ayahId, surahId, ayahNumberInSurah) {
             ayah_number_in_surah: ayahNumberInSurah,
         }),
     });
+
+    // Clear bookmarks cache after creation
+    clearCachePattern('/bookmarks');
+    // Also clear stats cache since bookmark count is included
+    clearCachePattern('/progress');
+
+    return result;
 }
 
 /**
  * Delete a bookmark
+ * Clears bookmarks cache after deletion
  */
 export async function deleteBookmark(bookmarkId) {
-    return fetchAPI(`/bookmarks/${bookmarkId}`, {
+    const result = await fetchAPI(`/bookmarks/${bookmarkId}`, {
         method: 'DELETE',
     });
+
+    // Clear bookmarks cache after deletion
+    clearCachePattern('/bookmarks');
+    // Also clear stats cache since bookmark count is included
+    clearCachePattern('/progress');
+
+    return result;
 }
 
 /**
@@ -318,9 +418,10 @@ export async function toggleBookmark(ayahId, surahId, ayahNumberInSurah, bookmar
 
 /**
  * Update reading progress for a surah
+ * Clears progress-related cache after update
  */
 export async function updateProgress(surahId, ayahId, ayahNumber) {
-    return fetchAPI('/progress', {
+    const result = await fetchAPI('/progress', {
         method: 'POST',
         body: JSON.stringify({
             surah_id: surahId,
@@ -328,6 +429,11 @@ export async function updateProgress(surahId, ayahId, ayahNumber) {
             ayah_number: ayahNumber,
         }),
     });
+
+    // Clear progress-related cache after update
+    clearCachePattern('/progress');
+
+    return result;
 }
 
 /**
@@ -339,9 +445,10 @@ export async function getProgress() {
 
 /**
  * Get reading statistics
+ * Cached for 2 minutes - stats change when user reads
  */
 export async function getProgressStats() {
-    return fetchAPI('/progress/stats');
+    return fetchAPI('/progress/stats', {}, CACHE_TTL.SHORT);
 }
 
 /**
@@ -357,9 +464,10 @@ export async function getLastPosition() {
 
 /**
  * Mark an ayah as completed
+ * Clears progress-related cache after update
  */
 export async function markAyahCompleted(ayahId, surahId, ayahNumber) {
-    return fetchAPI('/completed-ayahs', {
+    const result = await fetchAPI('/completed-ayahs', {
         method: 'POST',
         body: JSON.stringify({
             ayah_id: ayahId,
@@ -367,6 +475,12 @@ export async function markAyahCompleted(ayahId, surahId, ayahNumber) {
             ayah_number: ayahNumber,
         }),
     });
+
+    // Clear progress-related cache after update
+    clearCachePattern('/progress');
+    clearCachePattern('/completed-ayahs');
+
+    return result;
 }
 
 /**
@@ -415,9 +529,10 @@ export async function getOverallCompletionStats() {
 /**
  * Get detailed progress for all surahs (with completion status)
  * Returns array of all 114 surahs with read/unread ayah counts
+ * Cached for 5 minutes - progress changes but not that frequently
  */
 export async function getAllSurahsProgress() {
-    return fetchAPI('/progress/all-surahs');
+    return fetchAPI('/progress/all-surahs', {}, CACHE_TTL.MEDIUM);
 }
 
 /**
@@ -437,9 +552,10 @@ export async function clearSurahProgress(surahId) {
 /**
  * Get sequential progress (true Quran completion percentage)
  * Only counts ayahs where ALL previous ayahs are complete
+ * Cached for 2 minutes - changes when user reads
  */
 export async function getSequentialProgress() {
-    return fetchAPI('/progress/sequential');
+    return fetchAPI('/progress/sequential', {}, CACHE_TTL.SHORT);
 }
 
 /**
