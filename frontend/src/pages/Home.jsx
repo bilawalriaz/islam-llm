@@ -1,7 +1,25 @@
 import { Link } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
 import { Card } from '../components/Card';
-import { Timeline } from '../components/Timeline';
 import { useAuth } from '../contexts/AuthContext';
+
+// Lazy load Timeline - only loads when scrolled into view
+const Timeline = lazy(() => import('../components/Timeline').then(m => ({ default: m.Timeline })));
+
+// Timeline loading skeleton
+function TimelineSkeleton() {
+    return (
+        <div className="timeline-container">
+            {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="timeline-item" style={{ opacity: 0.5 }}>
+                    <div className="skeleton" style={{ width: '40px', height: '40px', borderRadius: '50%', margin: '0 auto 16px' }}></div>
+                    <h3 className="skeleton" style={{ width: '60%', margin: '0 auto 8px', borderRadius: '8px' }}></h3>
+                    <p className="skeleton" style={{ width: '80%', margin: '0 auto', borderRadius: '8px' }}></p>
+                </div>
+            ))}
+        </div>
+    );
+}
 
 /**
  * Home - Landing page with About and How to Use sections
@@ -120,7 +138,9 @@ function Home() {
 
             {/* Features Timeline */}
             <section className="features-section">
-                <Timeline data={features} />
+                <Suspense fallback={<TimelineSkeleton />}>
+                    <Timeline data={features} />
+                </Suspense>
             </section>
 
             {/* How to Use Section - Enhanced */}

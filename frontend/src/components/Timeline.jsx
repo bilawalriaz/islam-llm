@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, memo } from 'react';
 
 /**
  * Timeline - Advanced vertical timeline with scroll-triggered animations
@@ -119,4 +119,5 @@ export function Timeline({ data }) {
     );
 }
 
-export default Timeline;
+// Memoize Timeline to prevent re-renders when data hasn't changed
+export default memo(Timeline);

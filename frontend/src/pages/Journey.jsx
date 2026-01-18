@@ -1,8 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, StatCard } from '../components/Card';
 import { getBookmarks, getProgressStats, getSequentialProgress, getAllSurahsProgress, getSurahs } from '../api/client';
-import ShareSettingsPanel from '../components/ShareSettingsPanel';
+
+// Lazy load the ShareSettingsPanel - only loads when "Share Profile" tab is clicked
+const ShareSettingsPanel = lazy(() => import('../components/ShareSettingsPanel'));
+
+// Suspense fallback for lazy loaded components
+function SharePanelFallback() {
+    return (
+        <div className="share-settings-panel" style={{ padding: '48px', textAlign: 'center' }}>
+            <div className="skeleton" style={{ height: '32px', width: '70%', margin: '0 auto 12px', borderRadius: '8px' }}></div>
+            <div className="skeleton" style={{ height: '20px', width: '50%', margin: '0 auto 24px', borderRadius: '8px' }}></div>
+            <div className="skeleton" style={{ height: '200px', width: '100%', borderRadius: '12px' }}></div>
+        </div>
+    );
+}
 
 /**
  * Journey - Detailed Quran reading progress tracking
@@ -150,7 +163,8 @@ function Journey() {
         return '#f97316';
     };
 
-    const filteredSurahs = getFilteredSurahs();
+    // Memoize filtered surahs to prevent recalculation on every render
+    const filteredSurahs = useMemo(() => getFilteredSurahs(), [surahsProgress, viewMode]);
 
     // Skeleton loader for initial load
     if (loading) {
@@ -229,67 +243,102 @@ function Journey() {
             {/* Motivational Hero Section */}
             <Card className="mb-4" style={{ marginBottom: '24px', overflow: 'hidden', position: 'relative' }}>
                 <div className="card-body" style={{
-                    background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.08) 0%, rgba(249, 115, 22, 0.02) 100%)',
-                    padding: '32px'
+                    background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.12) 0%, rgba(249, 115, 22, 0.03) 100%)',
+                    padding: '40px',
+                    position: 'relative'
                 }}>
+                    {/* Decorative background elements */}
                     <div style={{
                         position: 'absolute',
-                        top: '0',
-                        right: '0',
+                        top: '-50px',
+                        right: '-50px',
                         width: '200px',
                         height: '200px',
-                        background: 'radial-gradient(circle, rgba(249, 115, 22, 0.1) 0%, transparent 70%)',
-                        pointerEvents: 'none'
+                        background: 'radial-gradient(circle, rgba(249, 115, 22, 0.15) 0%, transparent 70%)',
+                        pointerEvents: 'none',
+                        borderRadius: '50%'
+                    }}></div>
+                    <div style={{
+                        position: 'absolute',
+                        bottom: '-30px',
+                        left: '-30px',
+                        width: '150px',
+                        height: '150px',
+                        background: 'radial-gradient(circle, rgba(249, 115, 22, 0.08) 0%, transparent 70%)',
+                        pointerEvents: 'none',
+                        borderRadius: '50%'
                     }}></div>
                     <div style={{ position: 'relative', zIndex: 1 }}>
-                        <h3 style={{
+                        {/* Icon/Emoji at top */}
+                        <div style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '56px',
+                            height: '56px',
+                            borderRadius: '50%',
+                            background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.2) 0%, rgba(249, 115, 22, 0.1) 100%)',
                             fontSize: '1.75rem',
+                            marginBottom: '20px',
+                            boxShadow: '0 4px 12px rgba(249, 115, 22, 0.2)'
+                        }}>
+                            🌟
+                        </div>
+                        <h3 style={{
+                            fontSize: '1.875rem',
                             fontWeight: '800',
                             letterSpacing: '-0.03em',
-                            marginBottom: '8px',
-                            background: 'linear-gradient(135deg, var(--accent-color) 0%, var(--accent-hover) 100%)',
+                            marginBottom: '12px',
+                            background: 'linear-gradient(135deg, var(--accent-color) 0%, #ea580c 100%)',
                             WebkitBackgroundClip: 'text',
                             WebkitTextFillColor: 'transparent',
-                            backgroundClip: 'text'
+                            backgroundClip: 'text',
+                            lineHeight: '1.2'
                         }}>
                             {currentMessage.title}
                         </h3>
                         <p style={{
                             fontSize: '1.125rem',
                             color: 'var(--text-secondary)',
-                            marginBottom: '16px',
-                            lineHeight: '1.6'
+                            marginBottom: '20px',
+                            lineHeight: '1.6',
+                            fontWeight: '500'
                         }}>
                             {currentMessage.subtitle}
                         </p>
                         <div style={{
-                            padding: '16px',
-                            background: 'rgba(249, 115, 22, 0.08)',
+                            padding: '20px',
+                            background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.12) 0%, rgba(249, 115, 22, 0.05) 100%)',
                             borderLeft: '4px solid var(--accent-color)',
-                            borderRadius: '8px',
+                            borderRadius: '12px',
                             fontStyle: 'italic',
                             color: 'var(--text-primary)',
-                            lineHeight: '1.7',
-                            fontSize: '0.9375rem'
+                            lineHeight: '1.8',
+                            fontSize: '1rem',
+                            fontWeight: '400',
+                            boxShadow: '0 2px 8px rgba(249, 115, 22, 0.08)'
                         }}>
-                            ✨ {currentMessage.reward}
+                            <span style={{ marginRight: '8px' }}>✨</span>
+                            {currentMessage.reward}
                         </div>
                         {sequentialProgress && sequentialProgress.sequential_percentage > 0 && (
-                            <div style={{ marginTop: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <div style={{ flex: 1, height: '8px', background: 'rgba(0, 0, 0, 0.08)', borderRadius: '4px', overflow: 'hidden' }}>
+                            <div style={{ marginTop: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ flex: 1, height: '10px', background: 'rgba(0, 0, 0, 0.06)', borderRadius: '8px', overflow: 'hidden', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.1)' }}>
                                     <div style={{
                                         width: `${sequentialProgress.sequential_percentage}%`,
                                         height: '100%',
                                         background: 'linear-gradient(90deg, var(--accent-color) 0%, var(--accent-hover) 100%)',
-                                        borderRadius: '4px',
-                                        transition: 'width 0.5s ease'
+                                        borderRadius: '8px',
+                                        transition: 'width 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+                                        boxShadow: '0 2px 8px rgba(249, 115, 22, 0.3)'
                                     }}></div>
                                 </div>
                                 <span style={{
-                                    fontSize: '0.875rem',
+                                    fontSize: '0.9375rem',
                                     fontWeight: '700',
                                     color: 'var(--accent-color)',
-                                    whiteSpace: 'nowrap'
+                                    whiteSpace: 'nowrap',
+                                    textShadow: '0 1px 2px rgba(249, 115, 22, 0.1)'
                                 }}>
                                     {sequentialProgress.sequential_percentage}% Complete
                                 </span>
@@ -318,7 +367,9 @@ function Journey() {
             </div>
 
             {activeTab === 'share' ? (
-                <ShareSettingsPanel />
+                <Suspense fallback={<SharePanelFallback />}>
+                    <ShareSettingsPanel />
+                </Suspense>
             ) : (
                 <>
                     {/* Overview Stats */}
