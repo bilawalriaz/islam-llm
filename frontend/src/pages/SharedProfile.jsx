@@ -12,36 +12,57 @@ export default function SharedProfile() {
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [isDisabled, setIsDisabled] = useState(false);
 
-    // Theme styles mapping
+    // Theme styles mapping - Enhanced with new themes
     const themeStyles = {
         classic: {
-            background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)',
+            background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 50%, #fed7aa 100%)',
             text: '#1c1917',
             textSecondary: '#44403c',
             accent: '#f97316',
             cardBg: 'rgba(255, 255, 255, 0.9)',
+            shadow: '0 4px 6px -1px rgba(249, 115, 22, 0.15), 0 2px 4px -1px rgba(249, 115, 22, 0.1)',
         },
         nature: {
-            background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+            background: 'linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%)',
             text: '#ffffff',
-            textSecondary: '#cbd5e1',
+            textSecondary: '#d1fae5',
             accent: '#fbbf24',
-            cardBg: 'rgba(15, 23, 42, 0.8)',
+            cardBg: 'rgba(6, 78, 59, 0.6)',
+            shadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2)',
         },
         dark: {
-            background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+            background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)',
             text: '#ffffff',
             textSecondary: '#94a3b8',
             accent: '#f97316',
             cardBg: 'rgba(30, 41, 59, 0.9)',
+            shadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2)',
         },
         minimal: {
-            background: '#fafaf9',
+            background: 'linear-gradient(135deg, #fafaf9 0%, #f5f5f4 100%)',
             text: '#1c1917',
             textSecondary: '#44403c',
-            accent: '#f97316',
+            accent: '#71717a',
             cardBg: '#ffffff',
+            shadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
+        },
+        ocean: {
+            background: 'linear-gradient(135deg, #0c4a6e 0%, #075985 50%, #0369a1 100%)',
+            text: '#ffffff',
+            textSecondary: '#bae6fd',
+            accent: '#38bdf8',
+            cardBg: 'rgba(12, 74, 110, 0.6)',
+            shadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2)',
+        },
+        royal: {
+            background: 'linear-gradient(135deg, #581c87 0%, #6b21a8 50%, #7e22ce 100%)',
+            text: '#ffffff',
+            textSecondary: '#e9d5ff',
+            accent: '#c084fc',
+            cardBg: 'rgba(88, 28, 135, 0.6)',
+            shadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2)',
         },
     };
 
@@ -64,6 +85,9 @@ export default function SharedProfile() {
                     updateMetaTag('og:type', 'website');
                 }
             } catch (err) {
+                if (err.message?.includes('disabled') || err.message?.includes('403')) {
+                    setIsDisabled(true);
+                }
                 setError(err.message);
             } finally {
                 setLoading(false);
@@ -93,6 +117,40 @@ export default function SharedProfile() {
         );
     }
 
+    // Profile disabled state
+    if (isDisabled) {
+        return (
+            <div style={{
+                ...styles.container,
+                background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                minHeight: '100vh',
+            }}>
+                <div style={styles.content}>
+                    <div style={{
+                        ...styles.card,
+                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                        textAlign: 'center',
+                        padding: '60px 40px',
+                    }}>
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5" style={{ marginBottom: '24px' }}>
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                        </svg>
+                        <h1 style={{ fontSize: '28px', fontWeight: '700', margin: '0 0 16px 0', color: '#1c1917' }}>
+                            Profile Unavailable
+                        </h1>
+                        <p style={{ fontSize: '16px', color: '#64748b', marginBottom: '32px', lineHeight: 1.6 }}>
+                            This share profile has been temporarily disabled by the owner.
+                        </p>
+                        <Link to="/" style={styles.ctaButton}>
+                            Start Your Own Quran Journey
+                        </Link>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     if (error) {
         return (
             <div style={styles.errorContainer}>
@@ -118,7 +176,7 @@ export default function SharedProfile() {
         <div style={{ ...styles.container, background: theme.background, minHeight: '100vh' }}>
             <div style={styles.content}>
                 {/* Header Card */}
-                <div style={{ ...styles.headerCard, backgroundColor: theme.cardBg, color: theme.text }}>
+                <div style={{ ...styles.headerCard, backgroundColor: theme.cardBg, color: theme.text, boxShadow: theme.shadow }}>
                     <div style={styles.headerLeft}>
                         <h1 style={{ ...styles.userName, color: theme.text }}>
                             {profile.user.name || 'Quran Reader'}
@@ -145,7 +203,7 @@ export default function SharedProfile() {
                     {(stats.reading || stats.completion) && (
                         <>
                             {stats.completion && (
-                                <div style={{ ...styles.statCard, backgroundColor: theme.cardBg }}>
+                                <div style={{ ...styles.statCard, backgroundColor: theme.cardBg, boxShadow: theme.shadow }}>
                                     <div style={{ ...styles.statIcon, color: theme.accent }}>
                                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                             <circle cx="12" cy="12" r="10" />
@@ -164,7 +222,7 @@ export default function SharedProfile() {
                             )}
 
                             {stats.reading && (
-                                <div style={{ ...styles.statCard, backgroundColor: theme.cardBg }}>
+                                <div style={{ ...styles.statCard, backgroundColor: theme.cardBg, boxShadow: theme.shadow }}>
                                     <div style={{ ...styles.statIcon, color: theme.accent }}>
                                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                             <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
@@ -183,7 +241,7 @@ export default function SharedProfile() {
                             )}
 
                             {stats.streak !== undefined && (
-                                <div style={{ ...styles.statCard, backgroundColor: theme.cardBg }}>
+                                <div style={{ ...styles.statCard, backgroundColor: theme.cardBg, boxShadow: theme.shadow }}>
                                     <div style={{ ...styles.statIcon, color: theme.accent }}>
                                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                             <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3.5 4 4 6.5.5-2.5 1.5-5 2-6.5a6 6 0 0 0-2-4c-1-1-2-2-2-4a2.5 2.5 0 0 0 5 0" />
@@ -201,7 +259,7 @@ export default function SharedProfile() {
                             )}
 
                             {stats.bookmarks !== undefined && (
-                                <div style={{ ...styles.statCard, backgroundColor: theme.cardBg }}>
+                                <div style={{ ...styles.statCard, backgroundColor: theme.cardBg, boxShadow: theme.shadow }}>
                                     <div style={{ ...styles.statIcon, color: theme.accent }}>
                                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                             <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
@@ -220,7 +278,7 @@ export default function SharedProfile() {
 
                             {stats.listening && (
                                 <>
-                                    <div style={{ ...styles.statCard, backgroundColor: theme.cardBg }}>
+                                    <div style={{ ...styles.statCard, backgroundColor: theme.cardBg, boxShadow: theme.shadow }}>
                                         <div style={{ ...styles.statIcon, color: theme.accent }}>
                                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                                 <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
@@ -237,7 +295,7 @@ export default function SharedProfile() {
                                         </div>
                                     </div>
 
-                                    <div style={{ ...styles.statCard, backgroundColor: theme.cardBg }}>
+                                    <div style={{ ...styles.statCard, backgroundColor: theme.cardBg, boxShadow: theme.shadow }}>
                                         <div style={{ ...styles.statIcon, color: theme.accent }}>
                                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                                 <circle cx="12" cy="12" r="10" />
@@ -260,7 +318,7 @@ export default function SharedProfile() {
                 </div>
 
                 {/* Call to Action */}
-                <div style={{ ...styles.ctaCard, backgroundColor: theme.cardBg }}>
+                <div style={{ ...styles.ctaCard, backgroundColor: theme.cardBg, boxShadow: theme.shadow }}>
                     <h3 style={{ ...styles.ctaTitle, color: theme.text }}>Start Your Quran Journey</h3>
                     <p style={{ ...styles.ctaDescription, color: theme.textSecondary }}>
                         Track your reading progress, listen to beautiful recitations, and bookmark your favorite verses.
@@ -295,7 +353,6 @@ const styles = {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
     },
     headerLeft: {
         flex: 1,
@@ -342,7 +399,6 @@ const styles = {
         display: 'flex',
         alignItems: 'center',
         gap: '16px',
-        boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
     },
     statIcon: {
         flexShrink: 0,
@@ -364,7 +420,6 @@ const styles = {
         borderRadius: '20px',
         padding: '40px',
         textAlign: 'center',
-        boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
     },
     ctaTitle: {
         fontSize: '28px',
@@ -391,6 +446,13 @@ const styles = {
         color: '#64748b',
         marginTop: '24px',
         marginBottom: 0,
+    },
+    card: {
+        backgroundColor: '#ffffff',
+        borderRadius: '16px',
+        padding: '24px',
+        marginBottom: '24px',
+        border: '1px solid #e2e8f0',
     },
     loadingContainer: {
         display: 'flex',

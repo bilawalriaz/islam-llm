@@ -15,25 +15,49 @@ export default function ShareSettingsPanel() {
     const [copied, setCopied] = useState(false);
     const [message, setMessage] = useState(null);
 
-    // Theme options with visual previews
+    // Theme options with visual previews - Enhanced designs
     const themes = [
         {
             id: 'classic',
             name: 'Classic',
-            description: 'Warm orange gradient',
-            preview: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)',
+            description: 'Warm sunset gradient',
+            preview: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 50%, #fed7aa 100%)',
+            accent: '#f97316',
+        },
+        {
+            id: 'nature',
+            name: 'Forest',
+            description: 'Deep green with gold',
+            preview: 'linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%)',
+            accent: '#fbbf24',
         },
         {
             id: 'dark',
-            name: 'Dark',
-            description: 'Dark slate with accents',
-            preview: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+            name: 'Midnight',
+            description: 'Rich dark slate with orange',
+            preview: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)',
+            accent: '#f97316',
         },
         {
             id: 'minimal',
             name: 'Minimal',
-            description: 'Clean white/gray',
-            preview: '#fafaf9',
+            description: 'Clean monochrome',
+            preview: 'linear-gradient(135deg, #fafaf9 0%, #f5f5f4 100%)',
+            accent: '#71717a',
+        },
+        {
+            id: 'ocean',
+            name: 'Ocean',
+            description: 'Calm blue gradients',
+            preview: 'linear-gradient(135deg, #0c4a6e 0%, #075985 50%, #0369a1 100%)',
+            accent: '#38bdf8',
+        },
+        {
+            id: 'royal',
+            name: 'Royal Purple',
+            description: 'Elegant purple theme',
+            preview: 'linear-gradient(135deg, #581c87 0%, #6b21a8 50%, #7e22ce 100%)',
+            accent: '#c084fc',
         },
     ];
 
@@ -140,6 +164,9 @@ export default function ShareSettingsPanel() {
         );
     }
 
+    const isProfileEnabled = settings.enabled !== false;
+    const currentTheme = themes.find(t => t.id === settings.theme) || themes[0];
+
     return (
         <div className="share-settings-panel">
             <div style={styles.header}>
@@ -159,115 +186,171 @@ export default function ShareSettingsPanel() {
                 </div>
             )}
 
-            {/* Share URL Section */}
-            <div style={styles.card}>
-                <h3 style={styles.cardTitle}>Your Share Link</h3>
-                <p style={styles.cardDescription}>
-                    Share this link to let others see your progress.
-                </p>
-
-                <div style={styles.urlContainer}>
-                    <input
-                        type="text"
-                        value={getShareProfileUrl(settings.share_id)}
-                        readOnly
-                        style={styles.urlInput}
-                    />
-                    <button
-                        onClick={handleCopyUrl}
-                        style={styles.copyButton}
-                    >
-                        {copied ? 'Copied!' : 'Copy'}
-                    </button>
+            {/* Profile Enable/Disable Toggle - Prominent placement */}
+            <div style={{
+                ...styles.card,
+                borderLeft: `4px solid ${isProfileEnabled ? '#22c55e' : '#ef4444'}`,
+                background: isProfileEnabled
+                    ? 'linear-gradient(to right, rgba(34, 197, 94, 0.05), transparent)'
+                    : 'linear-gradient(to right, rgba(239, 68, 68, 0.05), transparent)',
+            }}>
+                <div style={styles.enableHeader}>
+                    <div style={styles.enableInfo}>
+                        <div style={{
+                            ...styles.statusBadge,
+                            backgroundColor: isProfileEnabled ? '#dcfce7' : '#fee2e2',
+                            color: isProfileEnabled ? '#166534' : '#991b1b',
+                        }}>
+                            <span style={{
+                                width: '8px',
+                                height: '8px',
+                                borderRadius: '50%',
+                                backgroundColor: isProfileEnabled ? '#22c55e' : '#ef4444',
+                                marginRight: '8px',
+                                display: 'inline-block',
+                            }} />
+                            {isProfileEnabled ? 'Public' : 'Disabled'}
+                        </div>
+                        <h3 style={styles.enableTitle}>
+                            {isProfileEnabled ? 'Your profile is public' : 'Your profile is disabled'}
+                        </h3>
+                        <p style={styles.enableDescription}>
+                            {isProfileEnabled
+                                ? 'Anyone with your share link can view your Quran reading progress.'
+                                : 'Your share link is temporarily hidden. Toggle to make it public again.'}
+                        </p>
+                    </div>
                 </div>
-
-                <a
-                    href={getShareProfileUrl(settings.share_id)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={styles.previewLink}
+                <button
+                    onClick={() => handleUpdateSettings({ enabled: !isProfileEnabled })}
+                    disabled={saving}
+                    style={{
+                        ...styles.enableButton,
+                        backgroundColor: isProfileEnabled ? '#ef4444' : '#22c55e',
+                    }}
                 >
-                    Preview your profile →
-                </a>
+                    {isProfileEnabled ? 'Disable Profile' : 'Enable Profile'}
+                </button>
             </div>
 
-            {/* Theme Selection */}
-            <div style={styles.card}>
-                <h3 style={styles.cardTitle}>Theme</h3>
-                <p style={styles.cardDescription}>
-                    Choose the visual style for your share profile.
-                </p>
+            {/* Share URL Section - Only show when enabled */}
+            {isProfileEnabled && (
+                <div style={styles.card}>
+                    <h3 style={styles.cardTitle}>Your Share Link</h3>
+                    <p style={styles.cardDescription}>
+                        Share this link to let others see your progress.
+                    </p>
 
-                <div style={styles.themeGrid}>
-                    {themes.map(theme => (
+                    <div style={styles.urlContainer}>
+                        <input
+                            type="text"
+                            value={getShareProfileUrl(settings.share_id)}
+                            readOnly
+                            style={styles.urlInput}
+                        />
                         <button
-                            key={theme.id}
-                            onClick={() => handleUpdateSettings({ theme: theme.id })}
-                            style={{
-                                ...styles.themeOption,
-                                border: settings.theme === theme.id ? '3px solid #f97316' : '3px solid transparent',
-                            }}
+                            onClick={handleCopyUrl}
+                            style={styles.copyButton}
                         >
-                            <div
-                                style={{
-                                    ...styles.themePreview,
-                                    background: theme.preview,
-                                }}
-                            />
-                            <div style={styles.themeInfo}>
-                                <span style={styles.themeName}>{theme.name}</span>
-                                <span style={styles.themeDescription}>{theme.description}</span>
-                            </div>
-                            {settings.theme === theme.id && (
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#f97316', marginLeft: 'auto' }}>
-                                    <polyline points="20 6 9 17 4 12" />
-                                </svg>
-                            )}
+                            {copied ? 'Copied!' : 'Copy'}
                         </button>
-                    ))}
-                </div>
-            </div>
+                    </div>
 
-            {/* Privacy Settings */}
-            <div style={styles.card}>
-                <h3 style={styles.cardTitle}>Privacy Settings</h3>
-                <p style={styles.cardDescription}>
-                    Choose which stats to display on your public profile.
-                </p>
-
-                <div style={styles.toggles}>
-                    <Toggle
-                        label="Show Completion Stats"
-                        description="Display completion percentage and ayahs completed"
-                        checked={settings.show_completion}
-                        onChange={(checked) => handleUpdateSettings({ show_completion: checked })}
-                    />
-                    <Toggle
-                        label="Show Reading Progress"
-                        description="Display total ayahs and surahs read"
-                        checked={settings.show_reading_progress}
-                        onChange={(checked) => handleUpdateSettings({ show_reading_progress: checked })}
-                    />
-                    <Toggle
-                        label="Show Reading Streak"
-                        description="Display your current reading streak"
-                        checked={settings.show_streak}
-                        onChange={(checked) => handleUpdateSettings({ show_streak: checked })}
-                    />
-                    <Toggle
-                        label="Show Bookmarks"
-                        description="Display your total bookmarks count"
-                        checked={settings.show_bookmarks}
-                        onChange={(checked) => handleUpdateSettings({ show_bookmarks: checked })}
-                    />
-                    <Toggle
-                        label="Show Listening Stats"
-                        description="Display total plays and listening time"
-                        checked={settings.show_listening_stats}
-                        onChange={(checked) => handleUpdateSettings({ show_listening_stats: checked })}
-                    />
+                    <a
+                        href={getShareProfileUrl(settings.share_id)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={styles.previewLink}
+                    >
+                        Preview your profile →
+                    </a>
                 </div>
-            </div>
+            )}
+
+            {/* Theme Selection - Only show when enabled */}
+            {isProfileEnabled && (
+                <div style={styles.card}>
+                    <h3 style={styles.cardTitle}>Theme</h3>
+                    <p style={styles.cardDescription}>
+                        Choose the visual style for your share profile.
+                    </p>
+
+                    <div style={styles.themeGrid}>
+                        {themes.map(theme => (
+                            <button
+                                key={theme.id}
+                                onClick={() => handleUpdateSettings({ theme: theme.id })}
+                                style={{
+                                    ...styles.themeOption,
+                                    border: settings.theme === theme.id
+                                        ? `3px solid ${theme.accent}`
+                                        : '3px solid transparent',
+                                    transform: settings.theme === theme.id ? 'scale(1.02)' : 'scale(1)',
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        ...styles.themePreview,
+                                        background: theme.preview,
+                                    }}
+                                />
+                                <div style={styles.themeInfo}>
+                                    <span style={styles.themeName}>{theme.name}</span>
+                                    <span style={styles.themeDescription}>{theme.description}</span>
+                                </div>
+                                {settings.theme === theme.id && (
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: theme.accent, marginLeft: 'auto' }}>
+                                        <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                )}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Privacy Settings - Only show when enabled */}
+            {isProfileEnabled && (
+                <div style={styles.card}>
+                    <h3 style={styles.cardTitle}>Privacy Settings</h3>
+                    <p style={styles.cardDescription}>
+                        Choose which stats to display on your public profile.
+                    </p>
+
+                    <div style={styles.toggles}>
+                        <Toggle
+                            label="Show Completion Stats"
+                            description="Display completion percentage and ayahs completed"
+                            checked={settings.show_completion}
+                            onChange={(checked) => handleUpdateSettings({ show_completion: checked })}
+                        />
+                        <Toggle
+                            label="Show Reading Progress"
+                            description="Display total ayahs and surahs read"
+                            checked={settings.show_reading_progress}
+                            onChange={(checked) => handleUpdateSettings({ show_reading_progress: checked })}
+                        />
+                        <Toggle
+                            label="Show Reading Streak"
+                            description="Display your current reading streak"
+                            checked={settings.show_streak}
+                            onChange={(checked) => handleUpdateSettings({ show_streak: checked })}
+                        />
+                        <Toggle
+                            label="Show Bookmarks"
+                            description="Display your total bookmarks count"
+                            checked={settings.show_bookmarks}
+                            onChange={(checked) => handleUpdateSettings({ show_bookmarks: checked })}
+                        />
+                        <Toggle
+                            label="Show Listening Stats"
+                            description="Display total plays and listening time"
+                            checked={settings.show_listening_stats}
+                            onChange={(checked) => handleUpdateSettings({ show_listening_stats: checked })}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -377,6 +460,48 @@ const styles = {
         color: '#64748b',
         margin: '0 0 20px 0',
     },
+    // Enable/Disable styles
+    enableHeader: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: '20px',
+    },
+    enableInfo: {
+        flex: 1,
+    },
+    statusBadge: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        padding: '6px 12px',
+        borderRadius: '20px',
+        fontSize: '13px',
+        fontWeight: '600',
+        marginBottom: '12px',
+    },
+    enableTitle: {
+        fontSize: '18px',
+        fontWeight: '600',
+        margin: '0 0 6px 0',
+        color: '#1c1917',
+    },
+    enableDescription: {
+        fontSize: '14px',
+        color: '#64748b',
+        margin: 0,
+        lineHeight: 1.5,
+    },
+    enableButton: {
+        padding: '12px 24px',
+        borderRadius: '10px',
+        border: 'none',
+        color: '#ffffff',
+        fontSize: '14px',
+        fontWeight: '600',
+        cursor: 'pointer',
+        transition: 'all 0.2s',
+        whiteSpace: 'nowrap',
+    },
     urlContainer: {
         display: 'flex',
         gap: '8px',
@@ -410,7 +535,7 @@ const styles = {
     },
     themeGrid: {
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
         gap: '16px',
     },
     themeOption: {
@@ -420,7 +545,7 @@ const styles = {
         borderRadius: '12px',
         border: '3px solid transparent',
         cursor: 'pointer',
-        transition: 'all 0.2s',
+        transition: 'all 0.2s ease',
         backgroundColor: '#f8fafc',
     },
     themePreview: {
@@ -444,7 +569,7 @@ const styles = {
     toggles: {
         display: 'flex',
         flexDirection: 'column',
-        gap: '20px',
+        gap: '16px',
     },
     toggle: {
         display: 'flex',

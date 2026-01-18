@@ -121,11 +121,15 @@ body {
 
 .nav-link:hover,
 .nav-link.active {
-    color: var(--text-white);
+    color: white;
     background: var(--gradient-accent);
     border-color: transparent;
     box-shadow: 0 8px 20px -6px rgba(249, 115, 22, 0.4);
     transform: translateY(-2px);
+}
+
+.nav-link.active:hover {
+    color: white;
 }
 
 /* Nav link icon (search) */
@@ -148,11 +152,15 @@ body {
 
 .nav-link-icon:hover,
 .nav-link-icon.active {
-    color: var(--text-white);
+    color: white;
     background: var(--gradient-accent);
     border-color: transparent;
     box-shadow: 0 8px 20px -6px rgba(249, 115, 22, 0.4);
     transform: translateY(-2px);
+}
+
+.nav-link-icon.active:hover {
+    color: white;
 }
 
 /* Hide text on nav-link-icon on desktop, show only icon */
@@ -271,6 +279,7 @@ body {
 .btn-primary:hover {
     transform: translateY(-2px);
     box-shadow: 0 12px 28px -6px rgba(249, 115, 22, 0.5);
+    color: white;
 }
 
 .btn-primary:disabled {
@@ -1116,12 +1125,12 @@ code {
     margin-top: 1rem;
 }
 
-.auth-links a {
+.auth-links a:not(.btn) {
     color: var(--text-secondary);
     font-weight: 500;
 }
 
-.auth-links a:hover {
+.auth-links a:not(.btn):hover {
     color: var(--accent-color);
 }
 
@@ -2212,6 +2221,19 @@ code {
     gap: 24px;
 }
 
+.steps-enhanced-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 24px;
+    margin-top: 24px;
+}
+
+@media (max-width: 768px) {
+    .steps-enhanced-container {
+        grid-template-columns: 1fr;
+    }
+}
+
 .step-item {
     display: flex;
     gap: 20px;
@@ -2316,9 +2338,8 @@ code {
 }
 
 .cta-card .btn-primary:hover {
-    background: rgba(255, 255, 255, 0.15);
-    color: white;
-    border-color: white;
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--accent-hover);
 }
 
 /* =============================================================================
@@ -2796,6 +2817,11 @@ code {
     box-shadow: var(--shadow-glow-accent);
 }
 
+/* Ensure white text on hover for active tabs */
+.filter-tab.active:hover {
+    color: white;
+}
+
 /* Surah Progress Grid */
 .surah-progress-grid {
     display: grid;
@@ -3196,6 +3222,14 @@ code {
     background: rgba(0, 0, 0, 0.03);
     border: 1px solid rgba(0, 0, 0, 0.04);
     border-radius: 100px;
+    color: var(--text-primary);
+    text-decoration: none;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.user-profile-pill:hover {
+    background: rgba(0, 0, 0, 0.06);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .user-avatar-small {

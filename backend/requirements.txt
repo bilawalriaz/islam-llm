@@ -4,3 +4,5 @@ Pillow>=10.0.0
 arabic-reshaper>=3.0.0
 python-bidi
 supabase>=2.0.0
+sentence-transformers>=2.2.0
+numpy>=1.24.0

@@ -53,7 +53,7 @@ export function ContinueJourney({ variant = 'card' }) {
     if (variant === 'compact') {
         return (
             <Link
-                to={`/quran/${progress.first_incomplete_surah}`}
+                to={`/quran/${progress.first_incomplete_surah}#ayah-${progress.first_incomplete_ayah}`}
                 className="btn-continue-journey"
                 style={{
                     display: 'inline-flex',
@@ -88,7 +88,7 @@ export function ContinueJourney({ variant = 'card' }) {
     // Full card variant
     return (
         <Link
-            to={`/quran/${progress.first_incomplete_surah}`}
+            to={`/quran/${progress.first_incomplete_surah}#ayah-${progress.first_incomplete_ayah}`}
             className="continue-journey-card"
             style={{
                 display: 'block',

@@ -2,6 +2,7 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { ContinueJourney } from './ContinueJourney';
+import { ScrollToTop } from './ScrollToTop';
 
 /**
  * Layout - Main app layout with header, navigation, and footer
@@ -102,12 +103,12 @@ function Layout() {
                                 {/* Add more nav links here */}
                             </nav>
                             <div className={`user-menu ${mobileMenuOpen ? 'user-menu-open' : ''}`}>
-                                <div className="user-profile-pill">
+                                <Link to="/account" className="user-profile-pill" title="Your Account">
                                     <div className="user-avatar-small">
                                         {(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
                                     </div>
                                     <span className="user-name-text">{user?.name || user?.email}</span>
-                                </div>
+                                </Link>
                                 <button onClick={handleLogout} className="btn-icon-logout" title="Logout">
                                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
@@ -163,6 +164,8 @@ function Layout() {
             <footer>
                 <p>&copy; {new Date().getFullYear()} Quran Reader.</p>
             </footer>
+
+            <ScrollToTop />
         </>
     );
 }

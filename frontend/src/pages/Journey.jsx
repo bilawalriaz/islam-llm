@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, StatCard } from '../components/Card';
-import { getBookmarks, getProgressStats, getLastPosition, getAllSurahsProgress, getSurahs } from '../api/client';
-import { LoadingState } from '../components/Spinner';
+import { getBookmarks, getProgressStats, getSequentialProgress, getAllSurahsProgress, getSurahs } from '../api/client';
 import ShareSettingsPanel from '../components/ShareSettingsPanel';
 
 /**
@@ -16,7 +15,7 @@ function Journey() {
         total_bookmarks: 0,
         reading_streak: 0,
     });
-    const [lastPosition, setLastPosition] = useState(null);
+    const [sequentialProgress, setSequentialProgress] = useState(null);
     const [bookmarks, setBookmarks] = useState([]);
     const [surahsProgress, setSurahsProgress] = useState([]);
     const [allSurahs, setAllSurahs] = useState([]);
@@ -25,6 +24,57 @@ function Journey() {
     const [viewMode, setViewMode] = useState('all'); // 'all', 'in-progress', 'completed', 'not-started'
     const [showAllBookmarks, setShowAllBookmarks] = useState(false);
     const [activeTab, setActiveTab] = useState('journey'); // 'journey', 'share'
+    const [motivationalIndex, setMotivationalIndex] = useState(0);
+
+    // Motivational messages for the hero section
+    const motivationalMessages = [
+        {
+            title: "Your Journey Through the Quran",
+            subtitle: "Every ayah you read brings you closer to Allah",
+            reward: "The Prophet (pbuh) said: 'The one who recites the Quran while stammering with it will have a double reward.'"
+        },
+        {
+            title: "Keep Going, You're Doing Great!",
+            subtitle: "Consistency is key in the journey of Quran",
+            reward: "The best among you are those who learn the Quran and teach it."
+        },
+        {
+            title: "Each Ayah is a Step Towards Jannah",
+            subtitle: "The Quran will intercede for its companions on the Day of Judgment",
+            reward: "Read the Quran, for it will come as an intercessor for its companions on the Day of Resurrection."
+        },
+        {
+            title: "Your Progress Inspires",
+            subtitle: "The light of the Quran illuminates your path in this life and the next",
+            reward: "Whoever reads a letter from the Book of Allah will receive a Hasanah (good deed)."
+        },
+        {
+            title: "The Rewards Are Endless",
+            subtitle: "Every letter you read earns you Hasanah (good deeds)",
+            reward: "The Prophet (pbuh) said: 'Whoever reads a letter from the Book of Allah will receive a Hasanah, and a Hasanah is multiplied by ten.'"
+        },
+        {
+            title: "Invest in Your Akhirah",
+            subtitle: "The Quran is a treasure that benefits you in this life and the next",
+            reward: "The Quran will be an intercessor on the Day of Judgment for those who used to recite it."
+        },
+        {
+            title: "Stay Consistent, Even One Ayah",
+            subtitle: "Small consistent steps lead to great rewards",
+            reward: "The most beloved deeds to Allah are those that are consistent, even if they are small."
+        },
+        {
+            title: "The Best of People",
+            subtitle: "You are among those who hold tight to the Quran",
+            reward: "The Prophet (pbuh) said: 'The best among you are those who learn the Quran and teach it.'"
+        }
+    ];
+
+    // Pick a random motivational message on component mount (changes on refresh)
+    useEffect(() => {
+        const randomIndex = Math.floor(Math.random() * motivationalMessages.length);
+        setMotivationalIndex(randomIndex);
+    }, []);
 
     useEffect(() => {
         loadProgressData();
@@ -32,16 +82,16 @@ function Journey() {
 
     const loadProgressData = async () => {
         try {
-            const [statsData, lastPosData, bookmarksData, progressData, surahsData] = await Promise.all([
+            const [statsData, sequentialData, bookmarksData, progressData, surahsData] = await Promise.all([
                 getProgressStats(),
-                getLastPosition().catch(() => null),
+                getSequentialProgress().catch(() => null),
                 getBookmarks(),
                 getAllSurahsProgress().catch(() => []),
                 getSurahs(),
             ]);
 
             setStats(statsData);
-            setLastPosition(lastPosData);
+            setSequentialProgress(sequentialData);
             setBookmarks(bookmarksData);
 
             // Merge surah info with progress data
@@ -102,19 +152,68 @@ function Journey() {
 
     const filteredSurahs = getFilteredSurahs();
 
+    // Skeleton loader for initial load
     if (loading) {
-        return <LoadingState message="Loading your progress..." />;
+        return (
+            <div className="progress-page">
+                <div className="page-header">
+                    <div>
+                        <h1 className="page-title">My Journey</h1>
+                        <p className="page-subtitle">Track your journey through the Quran</p>
+                    </div>
+                    <div className="page-header-actions">
+                        <div className="skeleton" style={{ height: '40px', width: '160px', borderRadius: '12px' }}></div>
+                        <div className="skeleton" style={{ height: '40px', width: '140px', borderRadius: '12px' }}></div>
+                    </div>
+                </div>
+
+                {/* Motivational hero skeleton */}
+                <div className="card mb-4" style={{ marginBottom: '24px' }}>
+                    <div className="card-body">
+                        <div className="skeleton" style={{ height: '32px', width: '70%', marginBottom: '12px', borderRadius: '8px' }}></div>
+                        <div className="skeleton" style={{ height: '20px', width: '50%', marginBottom: '16px', borderRadius: '8px' }}></div>
+                        <div className="skeleton" style={{ height: '16px', width: '90%', borderRadius: '8px' }}></div>
+                    </div>
+                </div>
+
+                {/* Stats skeleton */}
+                <div className="stats-grid">
+                    {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="stat-card">
+                            <div className="skeleton" style={{ height: '48px', width: '80px', margin: '0 auto 8px', borderRadius: '8px' }}></div>
+                            <div className="skeleton" style={{ height: '16px', width: '100px', margin: '0 auto', borderRadius: '8px' }}></div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Surah grid skeleton */}
+                <div className="surah-progress-grid">
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                        <div key={i} className="surah-progress-card" style={{ pointerEvents: 'none' }}>
+                            <div className="surah-progress-header">
+                                <div className="skeleton" style={{ width: '44px', height: '44px', borderRadius: '12px' }}></div>
+                                <div className="skeleton" style={{ width: '60px', height: '24px', borderRadius: '8px' }}></div>
+                            </div>
+                            <div className="skeleton" style={{ height: '24px', width: '70%', marginBottom: '8px', borderRadius: '8px' }}></div>
+                            <div className="skeleton" style={{ height: '16px', width: '50%', marginBottom: '8px', borderRadius: '8px' }}></div>
+                            <div className="skeleton" style={{ height: '6px', width: '100%', borderRadius: '3px' }}></div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
     }
 
     // Calculate overall completion percentage
     const totalAyahsInQuran = 6236; // Total ayahs in Quran
     const overallPercentage = Math.round((stats.total_ayahs_read / totalAyahsInQuran) * 100);
+    const currentMessage = motivationalMessages[motivationalIndex];
 
     return (
         <div className="progress-page">
             <div className="page-header">
                 <div>
-                    <h1 className="page-title">Your Journey</h1>
+                    <h1 className="page-title">My Journey</h1>
                     <p className="page-subtitle">Track your journey through the Quran</p>
                 </div>
                 <div className="page-header-actions">
@@ -126,6 +225,79 @@ function Journey() {
                     </Link>
                 </div>
             </div>
+
+            {/* Motivational Hero Section */}
+            <Card className="mb-4" style={{ marginBottom: '24px', overflow: 'hidden', position: 'relative' }}>
+                <div className="card-body" style={{
+                    background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.08) 0%, rgba(249, 115, 22, 0.02) 100%)',
+                    padding: '32px'
+                }}>
+                    <div style={{
+                        position: 'absolute',
+                        top: '0',
+                        right: '0',
+                        width: '200px',
+                        height: '200px',
+                        background: 'radial-gradient(circle, rgba(249, 115, 22, 0.1) 0%, transparent 70%)',
+                        pointerEvents: 'none'
+                    }}></div>
+                    <div style={{ position: 'relative', zIndex: 1 }}>
+                        <h3 style={{
+                            fontSize: '1.75rem',
+                            fontWeight: '800',
+                            letterSpacing: '-0.03em',
+                            marginBottom: '8px',
+                            background: 'linear-gradient(135deg, var(--accent-color) 0%, var(--accent-hover) 100%)',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            backgroundClip: 'text'
+                        }}>
+                            {currentMessage.title}
+                        </h3>
+                        <p style={{
+                            fontSize: '1.125rem',
+                            color: 'var(--text-secondary)',
+                            marginBottom: '16px',
+                            lineHeight: '1.6'
+                        }}>
+                            {currentMessage.subtitle}
+                        </p>
+                        <div style={{
+                            padding: '16px',
+                            background: 'rgba(249, 115, 22, 0.08)',
+                            borderLeft: '4px solid var(--accent-color)',
+                            borderRadius: '8px',
+                            fontStyle: 'italic',
+                            color: 'var(--text-primary)',
+                            lineHeight: '1.7',
+                            fontSize: '0.9375rem'
+                        }}>
+                            ✨ {currentMessage.reward}
+                        </div>
+                        {sequentialProgress && sequentialProgress.sequential_percentage > 0 && (
+                            <div style={{ marginTop: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ flex: 1, height: '8px', background: 'rgba(0, 0, 0, 0.08)', borderRadius: '4px', overflow: 'hidden' }}>
+                                    <div style={{
+                                        width: `${sequentialProgress.sequential_percentage}%`,
+                                        height: '100%',
+                                        background: 'linear-gradient(90deg, var(--accent-color) 0%, var(--accent-hover) 100%)',
+                                        borderRadius: '4px',
+                                        transition: 'width 0.5s ease'
+                                    }}></div>
+                                </div>
+                                <span style={{
+                                    fontSize: '0.875rem',
+                                    fontWeight: '700',
+                                    color: 'var(--accent-color)',
+                                    whiteSpace: 'nowrap'
+                                }}>
+                                    {sequentialProgress.sequential_percentage}% Complete
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </Card>
 
             {/* Main Tabs */}
             <div className="filter-tabs" style={{ marginBottom: '24px', justifyContent: 'center' }}>
@@ -175,14 +347,24 @@ function Journey() {
                         </div>
                     </Card>
 
-                    {/* Quick Actions */}
+                    {/* Quick Actions - Continue button using sequential progress */}
                     <div className="progress-quick-actions">
-                        {lastPosition && (
+                        {sequentialProgress && (
                             <Link
-                                to={`/quran/${lastPosition.surah_id}`}
+                                to={`/quran/${sequentialProgress.first_incomplete_surah}#ayah-${sequentialProgress.first_incomplete_ayah}`}
                                 className="btn btn-primary"
+                                style={{
+                                    padding: '16px 32px',
+                                    fontSize: '1rem',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '12px'
+                                }}
                             >
-                                Continue Reading: {lastPosition.surah_name}
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                </svg>
+                                Continue Reading: Surah {sequentialProgress.first_incomplete_surah}, Ayah {sequentialProgress.first_incomplete_ayah}
                             </Link>
                         )}
                     </div>

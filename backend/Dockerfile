@@ -32,4 +32,6 @@ ENV DB_PATH=/app/quran-dump/quran.db
 ENV AUDIO_PATH=/app/quran-dump/audio
 
 # Run the application with Gunicorn
-CMD ["gunicorn", "main:app", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8001"]
+# --preload: Loads app before forking workers, enabling shared memory for model
+# 1 worker for memory-constrained environments
+CMD ["gunicorn", "main:app", "--workers", "1", "--preload", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8001"]

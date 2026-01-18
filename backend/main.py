@@ -54,6 +54,21 @@ print(f"DEBUG: supabase_admin client created: {supabase_admin is not None}")
 
 app = FastAPI(title="Quran Reader API")
 
+# =============================================================================
+# PRELOAD EMBEDDINGS MODEL
+# =============================================================================
+# With gunicorn --preload, this loads the model in the parent process before
+# forking workers, enabling copy-on-write memory sharing. This reduces RAM
+# usage from ~2GB (4 workers x 420MB) to ~500MB total.
+# =============================================================================
+print("Preloading embeddings model...")
+try:
+    from embeddings import get_model
+    _ = get_model()
+    print("✓ Embeddings model loaded and ready")
+except Exception as e:
+    print(f"⚠ Failed to preload embeddings model: {e}")
+
 # CORS middleware - allows localhost, Tailscale, and production domain
 app.add_middleware(
     CORSMiddleware,
@@ -1782,38 +1797,88 @@ async def get_sequential_progress(current_user: dict = Depends(get_current_user)
     """
     Get true sequential progress - only count ayahs where ALL previous ayahs are complete.
     Returns first incomplete ayah and accurate completion percentage.
+
+    Automatically validates and updates sequential flags before calculating progress.
     """
-    # Get completed ayahs with is_sequential flag from Supabase
     client = supabase_admin or supabase
-    response = client.table("completed_ayahs").select("*").eq("user_id", current_user["id"]).eq("is_sequential", True).execute()
-    sequential_count = len(response.data) if response.data else 0
 
-    # Get all completed ayah IDs
-    all_completed = client.table("completed_ayahs").select("ayah_id").eq("user_id", current_user["id"]).execute()
-    completed_ayah_ids = [c["ayah_id"] for c in all_completed.data] if all_completed.data else []
+    # First, validate and update the sequential flags to ensure accuracy
+    # Get all completed ayahs
+    completed = client.table("completed_ayahs").select("ayah_id").eq("user_id", current_user["id"]).execute()
+    completed_ayah_ids = [c["ayah_id"] for c in completed.data] if completed.data else []
 
-    # Find first incomplete ayah from SQLite
+    # DEBUG: Log what we got from Supabase
+    print(f"[SEQUENTIAL DEBUG] User {current_user['id']}: {len(completed_ayah_ids)} completed ayahs from Supabase")
+    if completed_ayah_ids:
+        print(f"[SEQUENTIAL DEBUG] First 10 ayah_ids: {completed_ayah_ids[:10]}")
+        print(f"[SEQUENTIAL DEBUG] Last 10 ayah_ids: {completed_ayah_ids[-10:]}")
+
+    if completed_ayah_ids:
+        # Get all ayahs in order to check sequential completion
+        conn = get_db_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, surah_id, number_in_surah
+                FROM ayahs
+                ORDER BY surah_id, number_in_surah
+            """)
+            all_ayahs = cursor.fetchall()
+
+            # DEBUG: Log SQLite ayah IDs
+            print(f"[SEQUENTIAL DEBUG] Total ayahs in SQLite: {len(all_ayahs)}")
+            print(f"[SEQUENTIAL DEBUG] First 3 SQLite ayahs: {all_ayahs[:3]}")
+
+            # Calculate which ayahs are sequential (all previous ones are complete)
+            sequential_ids = []
+            completed_set = set(completed_ayah_ids)
+
+            for i, ayah in enumerate(all_ayahs):
+                if ayah["id"] in completed_set:
+                    # Check if all previous ayahs are also complete
+                    all_previous_complete = all(a["id"] in completed_set for a in all_ayahs[:i])
+                    if all_previous_complete:
+                        sequential_ids.append(ayah["id"])
+
+            # DEBUG: Log sequential calculation results
+            print(f"[SEQUENTIAL DEBUG] Sequential ayahs found: {len(sequential_ids)}")
+            if sequential_ids:
+                print(f"[SEQUENTIAL DEBUG] Last 5 sequential IDs: {sequential_ids[-5:]}")
+
+            # Reset all sequential flags and update
+            client.table("completed_ayahs").update({"is_sequential": False}).eq("user_id", current_user["id"]).execute()
+
+            for ayah_id in sequential_ids:
+                client.table("completed_ayahs").update({"is_sequential": True}).eq("user_id", current_user["id"]).eq("ayah_id", ayah_id).execute()
+
+            sequential_count = len(sequential_ids)
+        finally:
+            conn.close()
+    else:
+        sequential_count = 0
+        print(f"[SEQUENTIAL DEBUG] No completed ayahs found for user {current_user['id']}")
+
+    # Now calculate first incomplete ayah from SQLite - the ayah at sequential_count position
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        if completed_ayah_ids:
-            placeholders = ",".join("?" * len(completed_ayah_ids))
-            cursor.execute(f"""
-                SELECT MIN(a.number) as ayah_num, MIN(a.surah_id) as surah_id, MIN(a.number_in_surah) as ayah_in_surah
-                FROM ayahs a
-                WHERE a.id NOT IN ({placeholders})
-            """, completed_ayah_ids)
-        else:
-            cursor.execute("""
-                SELECT MIN(number) as ayah_num, MIN(surah_id) as surah_id, MIN(number_in_surah) as ayah_in_surah
-                FROM ayahs
-            """)
+        # Get the ayah at position sequential_count (0-indexed)
+        cursor.execute("""
+            SELECT surah_id, number_in_surah, number
+            FROM ayahs
+            ORDER BY surah_id, number_in_surah
+            LIMIT 1
+            OFFSET ?
+        """, (sequential_count,))
         first_incomplete = cursor.fetchone()
+
+        # DEBUG: Log final result
+        print(f"[SEQUENTIAL DEBUG] Final result: sequential_count={sequential_count}, first_incomplete={first_incomplete}")
 
         return {
             "sequential_completion_count": sequential_count,
             "sequential_percentage": round((sequential_count / 6236) * 100, 2),
-            "first_incomplete_ayah": first_incomplete["ayah_in_surah"] if first_incomplete else 1,
+            "first_incomplete_ayah": first_incomplete["number_in_surah"] if first_incomplete else 1,
             "first_incomplete_surah": first_incomplete["surah_id"] if first_incomplete else 1,
             "is_complete": sequential_count == 6236
         }
@@ -2699,6 +2764,7 @@ class ShareSettingsRequest(BaseModel):
     show_streak: Optional[bool] = None
     show_bookmarks: Optional[bool] = None
     show_listening_stats: Optional[bool] = None
+    enabled: Optional[bool] = None
 
 
 @app.post("/api/share/generate")
@@ -2769,6 +2835,7 @@ async def get_share_settings(current_user: dict = Depends(get_current_user)):
         "show_streak": profile.get("show_streak", True),
         "show_bookmarks": profile.get("show_bookmarks", False),
         "show_listening_stats": profile.get("show_listening_stats", False),
+        "enabled": profile.get("enabled", True),
         "created_at": profile.get("created_at"),
         "updated_at": profile.get("updated_at")
     }
@@ -2791,8 +2858,8 @@ async def update_share_settings(
     # Build update dict with only provided fields
     update_data = {}
     if data.theme is not None:
-        if data.theme not in ["classic", "nature", "dark", "minimal"]:
-            raise HTTPException(status_code=400, detail="Invalid theme. Must be: classic, nature, dark, or minimal")
+        if data.theme not in ["classic", "nature", "dark", "minimal", "ocean", "royal"]:
+            raise HTTPException(status_code=400, detail="Invalid theme. Must be: classic, nature, dark, minimal, ocean, or royal")
         update_data["theme"] = data.theme
     if data.show_reading_progress is not None:
         update_data["show_reading_progress"] = data.show_reading_progress
@@ -2804,6 +2871,8 @@ async def update_share_settings(
         update_data["show_bookmarks"] = data.show_bookmarks
     if data.show_listening_stats is not None:
         update_data["show_listening_stats"] = data.show_listening_stats
+    if data.enabled is not None:
+        update_data["enabled"] = data.enabled
 
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -2843,6 +2912,7 @@ async def get_public_share_stats(share_id: str):
     try:
         response = client.table("share_profiles").select(
             "user_id",
+            "enabled",
             "theme",
             "show_reading_progress",
             "show_completion",
@@ -2857,6 +2927,11 @@ async def get_public_share_stats(share_id: str):
         raise HTTPException(status_code=404, detail="Share profile not found")
 
     profile = response.data
+
+    # Check if profile is disabled
+    if not profile.get("enabled", True):
+        raise HTTPException(status_code=403, detail="This share profile has been disabled by the owner")
+
     user_id = profile["user_id"]
 
     # Get user profile info (name, created_at)

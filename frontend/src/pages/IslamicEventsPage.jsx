@@ -48,7 +48,8 @@ function IslamicEventsPage() {
 
     // Search events
     const handleSearch = async () => {
-        if (!searchQuery.trim()) {
+        // Allow searching by category only (no text query)
+        if (!searchQuery.trim() && !selectedCategory) {
             setSearchResults([]);
             return;
         }
@@ -112,8 +113,16 @@ function IslamicEventsPage() {
                 <span style={{ fontSize: '0.875rem' }}>{event.years_ago || '?'}</span>
             </div>
             <div className="surah-info">
-                <div className="surah-header">
-                    <h3 className="surah-name-arabic" style={{ fontSize: '1.125rem' }}>{event.title}</h3>
+                <div className="surah-header" style={{ alignItems: 'flex-start' }}>
+                    <h3 style={{
+                        fontSize: '1.125rem',
+                        fontWeight: '700',
+                        letterSpacing: '-0.02em',
+                        color: 'var(--text-primary)',
+                        textAlign: 'left !important',
+                        fontFamily: 'var(--font-main) !important',
+                        direction: 'ltr !important'
+                    }}>{event.title}</h3>
                     <div className="surah-details">
                         <span className="text-muted" style={{ fontSize: '0.875rem' }}>
                             {event.gregorian && (
@@ -327,8 +336,15 @@ function IslamicEventsPage() {
                                     <span>{count}</span>
                                 </div>
                                 <div className="surah-info">
-                                    <div className="surah-header">
-                                        <h3 className="surah-name-arabic">{getCategoryLabel(category)}</h3>
+                                    <div className="surah-header" style={{ alignItems: 'flex-start' }}>
+                                        <h3 style={{
+                                            fontWeight: '700',
+                                            letterSpacing: '-0.02em',
+                                            color: 'var(--text-primary)',
+                                            textAlign: 'left !important',
+                                            fontFamily: 'var(--font-main) !important',
+                                            direction: 'ltr !important'
+                                        }}>{getCategoryLabel(category)}</h3>
                                         <div className="surah-details">
                                             <span className="text-muted">Click to view events</span>
                                         </div>

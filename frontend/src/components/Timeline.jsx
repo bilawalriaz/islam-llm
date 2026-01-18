@@ -53,6 +53,21 @@ export function Timeline({ data }) {
 
         items.forEach((item) => observer.observe(item));
 
+        // Immediately check which items are already in view
+        // This ensures seamless experience on page load without requiring scroll
+        requestAnimationFrame(() => {
+            items.forEach((item) => {
+                const rect = item.getBoundingClientRect();
+                const windowHeight = window.innerHeight;
+                // If item is sufficiently in viewport, mark it as visible immediately
+                if (rect.top < windowHeight * 0.8 && rect.bottom > 0) {
+                    const index = parseInt(item.dataset.index, 10);
+                    item.classList.add('in-view');
+                    setActiveIndex((prev) => Math.max(prev, index));
+                }
+            });
+        });
+
         window.addEventListener('scroll', handleScroll, { passive: true });
         handleScroll(); // Initial calculation
 

@@ -198,7 +198,7 @@ function ShareButton({
                         </label>
                         <div style={{ display: 'flex', gap: '8px' }}>
                             <button
-                                className={`btn btn-sm ${imageFormat === 'landscape' ? 'btn-primary' : 'btn-secondary'}`}
+                                className={`btn btn-small ${imageFormat === 'landscape' ? 'btn-primary' : 'btn-secondary'}`}
                                 onClick={() => setImageFormat('landscape')}
                                 style={{ flex: 1, padding: '8px 12px', fontSize: '0.8rem' }}
                             >
@@ -208,7 +208,7 @@ function ShareButton({
                                 Landscape
                             </button>
                             <button
-                                className={`btn btn-sm ${imageFormat === 'square' ? 'btn-primary' : 'btn-secondary'}`}
+                                className={`btn btn-small ${imageFormat === 'square' ? 'btn-primary' : 'btn-secondary'}`}
                                 onClick={() => setImageFormat('square')}
                                 style={{ flex: 1, padding: '8px 12px', fontSize: '0.8rem' }}
                             >
@@ -218,7 +218,7 @@ function ShareButton({
                                 Square
                             </button>
                             <button
-                                className={`btn btn-sm ${imageFormat === 'portrait' ? 'btn-primary' : 'btn-secondary'}`}
+                                className={`btn btn-small ${imageFormat === 'portrait' ? 'btn-primary' : 'btn-secondary'}`}
                                 onClick={() => setImageFormat('portrait')}
                                 style={{ flex: 1, padding: '8px 12px', fontSize: '0.8rem' }}
                             >
@@ -237,14 +237,14 @@ function ShareButton({
                         </label>
                         <div style={{ display: 'flex', gap: '8px' }}>
                             <button
-                                className={`btn btn-sm ${imageStyle === 'classic' ? 'btn-primary' : 'btn-secondary'}`}
+                                className={`btn btn-small ${imageStyle === 'classic' ? 'btn-primary' : 'btn-secondary'}`}
                                 onClick={() => setImageStyle('classic')}
                                 style={{ flex: 1, padding: '8px 12px', fontSize: '0.8rem' }}
                             >
                                 Classic
                             </button>
                             <button
-                                className={`btn btn-sm ${imageStyle === 'nature' ? 'btn-primary' : 'btn-secondary'}`}
+                                className={`btn btn-small ${imageStyle === 'nature' ? 'btn-primary' : 'btn-secondary'}`}
                                 onClick={() => setImageStyle('nature')}
                                 style={{ flex: 1, padding: '8px 12px', fontSize: '0.8rem' }}
                             >
