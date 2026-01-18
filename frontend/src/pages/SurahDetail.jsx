@@ -12,6 +12,7 @@ import { LoadingState, EmptyState } from '../components/Spinner';
 import Button from '../components/Button';
 import ShareButton from '../components/ShareButton';
 import Modal from '../components/Modal';
+import Toast from '../components/Toast';
 import { useMediaSession } from '../hooks/useMediaSession';
 import TextHighlighter from '../components/TextHighlighter';
 
@@ -138,6 +139,9 @@ function SurahDetail() {
     // Floating progress indicator visibility state
     const [showFloatingProgress, setShowFloatingProgress] = useState(false);
     const [volume, setVolume] = useState(1);
+
+    // Toast notifications
+    const [toast, setToast] = useState(null);
 
     // Scroll Progress & Reading Tracking
     const [scrollProgress, setScrollProgress] = useState(0);
@@ -937,28 +941,48 @@ function SurahDetail() {
         playAyah(0);
     };
 
-    const startContinuousPlay = async () => {
-        try {
-            // Start a Quran play session on the backend
-            const sessionData = await startQuranPlay();
-            setQuranSessionId(sessionData.session_id);
-            setQuranPlayMode(true);
-            setAutoPlay(true);
+    const toggleContinuousPlay = async () => {
+        if (quranPlayMode) {
+            // Turn off continuous play
+            setQuranPlayMode(false);
+            setAutoPlay(false);
+            if (quranSessionId) {
+                try {
+                    await endQuranPlay(quranSessionId);
+                } catch (err) {
+                    console.error('Failed to end Quran play session:', err);
+                }
+                setQuranSessionId(null);
+            }
+            setToast({ message: 'Continuous playback disabled', type: 'info' });
+            setTimeout(() => setToast(null), 3000);
+        } else {
+            // Turn on continuous play
+            try {
+                const sessionData = await startQuranPlay();
+                setQuranSessionId(sessionData.session_id);
+                setQuranPlayMode(true);
+                setAutoPlay(true);
 
-            // Determine starting ayah: current playing, last played, or first
-            const startIndex = playingAyah !== null
-                ? playingAyah
-                : lastPlayingAyahRef.current !== null
-                    ? lastPlayingAyahRef.current
-                    : lastPlayedIndex !== null
-                        ? lastPlayedIndex
-                        : completionStats?.first_unread_ayah
-                            ? ayahs.findIndex(a => a.number_in_surah === completionStats.first_unread_ayah)
-                            : 0;
+                // Determine starting ayah: current playing, last played, or first
+                const startIndex = playingAyah !== null
+                    ? playingAyah
+                    : lastPlayingAyahRef.current !== null
+                        ? lastPlayingAyahRef.current
+                        : lastPlayedIndex !== null
+                            ? lastPlayedIndex
+                            : completionStats?.first_unread_ayah
+                                ? ayahs.findIndex(a => a.number_in_surah === completionStats.first_unread_ayah)
+                                : 0;
 
-            playAyah(startIndex >= 0 ? startIndex : 0);
-        } catch (err) {
-            console.error('Failed to start continuous play:', err);
+                playAyah(startIndex >= 0 ? startIndex : 0);
+                setToast({ message: 'Continuous playback enabled - playing full Quran', type: 'success' });
+                setTimeout(() => setToast(null), 3000);
+            } catch (err) {
+                console.error('Failed to start continuous play:', err);
+                setToast({ message: 'Failed to enable continuous playback', type: 'error' });
+                setTimeout(() => setToast(null), 3000);
+            }
         }
     };
 
