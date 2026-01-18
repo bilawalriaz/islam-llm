@@ -1772,14 +1772,11 @@ body:has(.floating-progress.visible) .surah-nav-footer {
     border: 1px solid transparent;
     background-clip: padding-box;
     position: relative;
-    padding: 18px 20px;
+    padding: 16px 18px;
     display: flex;
     align-items: center;
     gap: 16px;
-    width: fit-content;
-    min-width: 400px;
-    max-width: 90vw;
-    margin: 0 auto;
+    max-width: calc(100vw - 48px);
     color: white;
     /* 120Hz Optimization */
     will-change: transform, opacity;
@@ -1820,30 +1817,34 @@ body:has(.floating-progress.visible) .surah-nav-footer {
 }
 
 .floating-progress-info {
-    flex: 1;
+    flex: 0 1 auto;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
+    min-width: 0;
 }
 
 .floating-progress-titles {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     flex-wrap: nowrap;
+    min-width: 0;
 }
 
 .floating-progress-surah-ar {
     font-family: var(--font-arabic);
-    font-size: 1.25rem;
+    font-size: 1.15rem;
     color: white;
     line-height: 1;
+    flex-shrink: 0;
 }
 
 .floating-progress-surah-en {
-    font-size: 0.875rem;
+    font-size: 0.85rem;
     font-weight: 600;
     color: #cbd5e1;
+    flex-shrink: 0;
 }
 
 .floating-progress-surah-translation {
@@ -1858,68 +1859,14 @@ body:has(.floating-progress.visible) .surah-nav-footer {
     font-weight: 500;
 }
 
-.marquee-container {
-    flex: 1;
-    overflow: hidden;
-    position: relative;
-    white-space: nowrap;
-    display: flex;
-    justify-content: center;
-    mask-image: linear-gradient(to right, transparent, black 15px, black calc(100% - 15px), transparent);
-    -webkit-mask-image: linear-gradient(to right, transparent, black 15px, black calc(100% - 15px), transparent);
-}
-
-.marquee-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-    flex-shrink: 0;
-    padding-right: 60px;
-    /* Space between loops */
-}
-
-.marquee-text {
-    display: inline-flex;
-    align-items: center;
-    gap: 0;
-    /* Gap will be handled by marquee-item margin if needed */
-    white-space: nowrap;
-    animation: none;
-    /* Default to no animation */
-}
-
-/* Set animation only if needed via JS or assume active */
-.marquee-text.animate {
-    animation: marquee 30s linear infinite;
-}
-
-@keyframes marquee {
-    0% {
-        transform: translateX(0);
-    }
-
-    100% {
-        transform: translateX(-50%);
-    }
-}
-
-.floating-progress-dot {
-    width: 3px;
-    height: 3px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.3);
-}
-
 .floating-progress-label {
-    font-size: 0.75rem;
-    font-weight: 700;
-    background: linear-gradient(90deg, #94a3b8 0%, #64748b 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #f97316;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .floating-progress-bar {
@@ -2065,6 +2012,15 @@ body:has(.floating-progress.visible) .surah-nav-footer {
     box-shadow:
         0 0 30px rgba(249, 115, 22, 0.5),
         inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.btn-speed-floating {
+    width: auto;
+    min-width: 40px;
+    padding: 0 10px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
 }
 
 .floating-progress-volume {
@@ -2988,37 +2944,49 @@ body:has(.floating-progress.visible) .surah-nav-footer {
 
     /* Floating progress indicator mobile styles */
     .floating-progress {
-        bottom: 16px;
-        right: 16px;
-        left: 16px;
+        bottom: 12px;
+        right: 12px;
+        left: 12px;
     }
 
     .floating-progress-content {
-        min-width: auto;
-        max-width: none;
+        padding: 14px 16px;
         flex-direction: column;
         align-items: stretch;
         gap: 12px;
     }
 
     .floating-progress-info {
-        text-align: center;
         gap: 8px;
+        flex: 0 0 auto;
+        width: 100%;
+        text-align: center;
     }
 
     .floating-progress-titles {
         justify-content: center;
         flex-wrap: wrap;
-        gap: 6px;
+        gap: 8px;
     }
 
     .floating-progress-surah-ar {
-        font-size: 1.125rem;
+        font-size: 1.15rem;
+    }
+
+    .floating-progress-surah-en {
+        font-size: 0.875rem;
+    }
+
+    .floating-progress-label {
+        font-size: 0.75rem;
     }
 
     .floating-progress-controls {
         justify-content: center;
         width: 100%;
+        flex: 0 0 auto;
+        flex-wrap: wrap;
+        gap: 8px;
     }
 
     .floating-progress-separator {
@@ -3031,14 +2999,13 @@ body:has(.floating-progress.visible) .surah-nav-footer {
         align-items: center;
         justify-content: center;
         gap: 12px;
-        padding-top: 12px;
-        border-top: none;
-        align-self: center;
+        padding-top: 8px;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .floating-progress-volume {
-        flex: 1;
-        max-width: 150px;
+        flex: 0 0 auto;
+        max-width: 120px;
     }
 
     .volume-slider {
@@ -3046,12 +3013,21 @@ body:has(.floating-progress.visible) .surah-nav-footer {
     }
 
     .reciter-select-floating {
-        flex: 1;
-        max-width: 150px;
+        flex: 0 0 auto;
+        max-width: 140px;
+        font-size: 0.75rem;
+        padding: 6px 28px 6px 10px;
     }
 
     .btn-icon-floating {
         flex-shrink: 0;
+        padding: 10px;
+    }
+
+    .btn-speed-floating {
+        min-width: 42px;
+        padding: 0 10px;
+        font-size: 0.75rem;
     }
 
     /* Mobile scroll to top adjustment */
@@ -3063,14 +3039,14 @@ body:has(.floating-progress.visible) .surah-nav-footer {
     }
 
     body:has(.floating-progress.visible) .scroll-to-top {
-        bottom: 240px;
-        /* Increased to clear the taller mobile player */
+        bottom: 180px;
+        /* Adjusted for 2-row mobile player */
     }
 
     /* Mobile surah nav adjustment */
     body:has(.floating-progress.visible) .surah-nav-footer {
-        padding-bottom: 280px;
-        /* More space for the stacked mobile player */
+        padding-bottom: 210px;
+        /* Adjusted for 2-row mobile player */
     }
 }
 

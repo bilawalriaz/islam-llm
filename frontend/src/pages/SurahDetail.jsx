@@ -1388,28 +1388,12 @@ function SurahDetail() {
             <div className={`floating-progress ${showFloatingProgress ? 'visible' : ''}`}>
                 <div className="floating-progress-content">
                     <div className="floating-progress-info">
-                        <div className="floating-progress-titles marquee-container">
-                            <div className="marquee-text animate">
-                                <div className="marquee-item">
-                                    <span className="floating-progress-surah-ar">{surah?.name}</span>
-                                    <span className="floating-progress-surah-en">{surah?.english_name}</span>
-                                    <span className="floating-progress-surah-translation">({surah?.english_name_translation})</span>
-                                    <div className="floating-progress-dot" />
-                                    <span className="floating-progress-label">
-                                        Ayah {playingAyah !== null ? ayahs[playingAyah]?.number_in_surah : (ayahs[lastPlayedIndex]?.number_in_surah || '-')} of {ayahs.length}
-                                    </span>
-                                </div>
-                                {/* Seamless Loop Duplicate */}
-                                <div className="marquee-item" aria-hidden="true">
-                                    <span className="floating-progress-surah-ar">{surah?.name}</span>
-                                    <span className="floating-progress-surah-en">{surah?.english_name}</span>
-                                    <span className="floating-progress-surah-translation">({surah?.english_name_translation})</span>
-                                    <div className="floating-progress-dot" />
-                                    <span className="floating-progress-label">
-                                        Ayah {playingAyah !== null ? ayahs[playingAyah]?.number_in_surah : (ayahs[lastPlayedIndex]?.number_in_surah || '-')} of {ayahs.length}
-                                    </span>
-                                </div>
-                            </div>
+                        <div className="floating-progress-titles">
+                            <span className="floating-progress-surah-ar">{surah?.name}</span>
+                            <span className="floating-progress-surah-en">{surah?.english_name}</span>
+                            <span className="floating-progress-label">
+                                Ayah {playingAyah !== null ? ayahs[playingAyah]?.number_in_surah : (ayahs[lastPlayedIndex]?.number_in_surah || '-')} / {ayahs.length}
+                            </span>
                         </div>
                         {completionStats && (
                             <div className="floating-progress-bar">
@@ -1501,7 +1485,7 @@ function SurahDetail() {
 
                         {/* Speed Control */}
                         <button
-                            className="btn-icon-floating"
+                            className="btn-icon-floating btn-speed-floating"
                             onClick={() => {
                                 const speeds = [1, 1.25, 1.5, 2, 0.5, 0.75];
                                 const currentIndex = speeds.indexOf(playbackSpeed);
@@ -1509,7 +1493,6 @@ function SurahDetail() {
                                 setPlaybackSpeed(speeds[nextIndex]);
                             }}
                             title={`Playback Speed: ${playbackSpeed}x`}
-                            style={{ fontSize: '11px', fontWeight: 'bold', width: 'auto', padding: '0 8px', minWidth: '32px' }}
                         >
                             {playbackSpeed}x
                         </button>
