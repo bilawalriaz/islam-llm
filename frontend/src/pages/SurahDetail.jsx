@@ -12,6 +12,7 @@ import { LoadingState, EmptyState } from '../components/Spinner';
 import Button from '../components/Button';
 import ShareButton from '../components/ShareButton';
 import Modal from '../components/Modal';
+import Toast from '../components/Toast';
 import { useMediaSession } from '../hooks/useMediaSession';
 import TextHighlighter from '../components/TextHighlighter';
 
@@ -138,6 +139,9 @@ function SurahDetail() {
     // Floating progress indicator visibility state
     const [showFloatingProgress, setShowFloatingProgress] = useState(false);
     const [volume, setVolume] = useState(1);
+
+    // Toast notifications
+    const [toast, setToast] = useState(null);
 
     // Scroll Progress & Reading Tracking
     const [scrollProgress, setScrollProgress] = useState(0);
@@ -937,6 +941,51 @@ function SurahDetail() {
         playAyah(0);
     };
 
+    const toggleContinuousPlay = async () => {
+        if (quranPlayMode) {
+            // Turn off continuous play
+            setQuranPlayMode(false);
+            setAutoPlay(false);
+            if (quranSessionId) {
+                try {
+                    await endQuranPlay(quranSessionId);
+                } catch (err) {
+                    console.error('Failed to end Quran play session:', err);
+                }
+                setQuranSessionId(null);
+            }
+            setToast({ message: 'Continuous playback disabled', type: 'info' });
+            setTimeout(() => setToast(null), 3000);
+        } else {
+            // Turn on continuous play
+            try {
+                const sessionData = await startQuranPlay();
+                setQuranSessionId(sessionData.session_id);
+                setQuranPlayMode(true);
+                setAutoPlay(true);
+
+                // Determine starting ayah: current playing, last played, or first
+                const startIndex = playingAyah !== null
+                    ? playingAyah
+                    : lastPlayingAyahRef.current !== null
+                        ? lastPlayingAyahRef.current
+                        : lastPlayedIndex !== null
+                            ? lastPlayedIndex
+                            : completionStats?.first_unread_ayah
+                                ? ayahs.findIndex(a => a.number_in_surah === completionStats.first_unread_ayah)
+                                : 0;
+
+                playAyah(startIndex >= 0 ? startIndex : 0);
+                setToast({ message: 'Continuous playback enabled - playing full Quran', type: 'success' });
+                setTimeout(() => setToast(null), 3000);
+            } catch (err) {
+                console.error('Failed to start continuous play:', err);
+                setToast({ message: 'Failed to enable continuous playback', type: 'error' });
+                setTimeout(() => setToast(null), 3000);
+            }
+        }
+    };
+
     const stopPlayback = () => {
         setAutoPlay(false);
         pauseAyah();
@@ -1497,6 +1546,28 @@ function SurahDetail() {
                             {playbackSpeed}x
                         </button>
 
+                        {/* Continuous Play Button */}
+                        <button
+                            className={`btn-icon-floating ${quranPlayMode ? 'btn-continuous-play-active' : ''}`}
+                            onClick={toggleContinuousPlay}
+                            title={quranPlayMode ? 'Disable continuous play' : 'Play full Quran continuously'}
+                        >
+                            {quranPlayMode ? (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+                                </svg>
+                            ) : (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+                                </svg>
+                            )}
+                            {quranPlayMode && (
+                                <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor" className="continuous-play-indicator">
+                                    <circle cx="12" cy="12" r="10"/>
+                                </svg>
+                            )}
+                        </button>
+
                         <div className="floating-progress-separator" />
 
                         {/* Audio Settings (Stacked Volume + Reciter) */}
@@ -1716,6 +1787,13 @@ function SurahDetail() {
                             <line x1="6" y1="6" x2="18" y2="18"></line>
                         </svg>
                     </button>
+                </div>
+            )}
+
+            {/* Toast Notifications */}
+            {toast && (
+                <div className="toast-container">
+                    <Toast message={toast.message} type={toast.type} />
                 </div>
             )}
         </>
