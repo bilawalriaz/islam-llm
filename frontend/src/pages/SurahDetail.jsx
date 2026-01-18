@@ -135,6 +135,7 @@ function SurahDetail() {
     const lastPlayingAyahRef = useRef(null);
     const hasScrolledToHashRef = useRef(false);
     const initialSurahIdRef = useRef(id);
+    const shouldAutoPlayFirstAyahRef = useRef(false);
 
     // Floating progress indicator visibility state
     const [showFloatingProgress, setShowFloatingProgress] = useState(false);
@@ -193,22 +194,12 @@ function SurahDetail() {
             setQuranPlayMode(true);
             setQuranSessionId(parseInt(sessionId));
             setAutoPlay(true);
+            shouldAutoPlayFirstAyahRef.current = true;
 
             // Clear sessionStorage
             sessionStorage.removeItem('quranPlayMode');
             sessionStorage.removeItem('quranSessionId');
             sessionStorage.removeItem('autoPlay');
-
-            // Start playing first ayah of this surah after a short delay
-            setTimeout(() => {
-                // Fetch current ayahs to ensure we have them
-                setAyahs(currentAyahs => {
-                    if (currentAyahs.length > 0) {
-                        playAyah(0);
-                    }
-                    return currentAyahs;
-                });
-            }, 500);
         }
     }, [id]);
 
@@ -601,6 +592,17 @@ function SurahDetail() {
             }
         };
     }, [playingAyah, ayahs, isAuthenticated, id]);
+
+    // Auto-play first ayah when continuing Quran play mode
+    useEffect(() => {
+        if (shouldAutoPlayFirstAyahRef.current && ayahs.length > 0 && !loading) {
+            shouldAutoPlayFirstAyahRef.current = false;
+            // Small delay to ensure everything is ready
+            setTimeout(() => {
+                playAyah(0);
+            }, 100);
+        }
+    }, [ayahs, loading]);
 
     const loadSurahData = async () => {
         try {
