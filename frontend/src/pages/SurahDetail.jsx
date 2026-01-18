@@ -1500,6 +1500,8 @@ function SurahDetail() {
                             {playbackSpeed}x
                         </button>
 
+                        <div className="floating-progress-separator" />
+
                         {/* Audio Settings (Stacked Volume + Reciter) */}
                         <div className="floating-progress-settings">
                             {/* Volume Control */}
