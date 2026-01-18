@@ -1326,7 +1326,7 @@ function SurahDetail() {
                                                     </svg>
                                                 )}
                                             </button>
-                                            {/* Share Button */}
+                                            {/* Share Button 
                                             <ShareButton
                                                 surahId={parseInt(id)}
                                                 ayahNumber={ayah.number_in_surah}
@@ -1335,7 +1335,7 @@ function SurahDetail() {
                                                 surahTranslation={surah.english_name_translation}
                                                 totalAyahs={surah.number_of_ayahs}
                                                 translation={selectedTranslation}
-                                            />
+                                            />*/}
                                             {/* Play/Pause Button */}
                                             <button
                                                 className={`btn-icon ${isPlaying ? 'playing' : ''}`}
@@ -1398,14 +1398,6 @@ function SurahDetail() {
                                     <span className="floating-progress-label">
                                         Ayah {playingAyah !== null ? ayahs[playingAyah]?.number_in_surah : (ayahs[lastPlayedIndex]?.number_in_surah || '-')} of {ayahs.length}
                                     </span>
-                                    {playingAyah !== null && translationAyahs[playingAyah] && (
-                                        <>
-                                            <div className="floating-progress-dot" />
-                                            <span className="floating-progress-ayah-translation">
-                                                {translationAyahs[playingAyah].text}
-                                            </span>
-                                        </>
-                                    )}
                                 </div>
                                 {/* Seamless Loop Duplicate */}
                                 <div className="marquee-item" aria-hidden="true">
@@ -1416,14 +1408,6 @@ function SurahDetail() {
                                     <span className="floating-progress-label">
                                         Ayah {playingAyah !== null ? ayahs[playingAyah]?.number_in_surah : (ayahs[lastPlayedIndex]?.number_in_surah || '-')} of {ayahs.length}
                                     </span>
-                                    {playingAyah !== null && translationAyahs[playingAyah] && (
-                                        <>
-                                            <div className="floating-progress-dot" />
-                                            <span className="floating-progress-ayah-translation">
-                                                {translationAyahs[playingAyah].text}
-                                            </span>
-                                        </>
-                                    )}
                                 </div>
                             </div>
                         </div>

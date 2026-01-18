@@ -1777,7 +1777,7 @@ body:has(.floating-progress.visible) .surah-nav-footer {
     align-items: center;
     gap: 16px;
     width: fit-content;
-    min-width: 440px;
+    min-width: 400px;
     max-width: 90vw;
     margin: 0 auto;
     color: white;
@@ -3027,11 +3027,10 @@ body:has(.floating-progress.visible) .surah-nav-footer {
 
     .floating-progress-settings {
         width: 100%;
-        min-width: auto;
         flex-direction: row;
         align-items: center;
         justify-content: center;
-        gap: 16px;
+        gap: 12px;
         padding-top: 12px;
         border-top: none;
         align-self: center;
