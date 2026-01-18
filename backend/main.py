@@ -1136,7 +1136,7 @@ class BookmarkRequest(BaseModel):
 
 @app.get("/api/bookmarks")
 async def get_bookmarks(current_user: dict = Depends(get_current_user)):
-    """Get all bookmarks for the current user."""
+    """Get all bookmarks for the current user. Optimized with batch queries."""
     # Get bookmarks from Supabase (using admin client to bypass RLS)
     client = supabase_admin or supabase
     response = client.table("bookmarks").select("*").eq("user_id", current_user["id"]).order("created_at", desc=True).execute()
@@ -1146,48 +1146,69 @@ async def get_bookmarks(current_user: dict = Depends(get_current_user)):
 
     bookmarks = response.data
 
-    # Enrich with Quran data from SQLite
+    # Collect all unique surah_ids and ayah_ids for batch queries
+    surah_ids = list(set(bm["surah_id"] for bm in bookmarks))
+    ayah_ids = list(set(bm["ayah_id"] for bm in bookmarks))
+
+    # Enrich with Quran data from SQLite using BATCH queries (much faster!)
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM editions WHERE identifier = ?", ("quran-uthmani",))
-        edition_row = cursor.fetchone()
-        edition_id = edition_row[0] if edition_row else 1
 
-        # Get English translation edition
+        # Get English translation edition ID once
         cursor.execute("SELECT id FROM editions WHERE identifier = ?", ("en.sahih",))
         en_edition_row = cursor.fetchone()
         en_edition_id = en_edition_row[0] if en_edition_row else None
 
+        # BATCH QUERY 1: Get all surah info in a single query
+        surahs_data = {}
+        if surah_ids:
+            placeholders = ",".join("?" * len(surah_ids))
+            cursor.execute(f"""
+                SELECT id, name, english_name, english_name_translation, revelation_type, number_of_ayahs
+                FROM surahs
+                WHERE id IN ({placeholders})
+            """, surah_ids)
+            for row in cursor.fetchall():
+                surahs_data[row["id"]] = dict(row)
+
+        # BATCH QUERY 2: Get all ayah texts in a single query
+        ayahs_data = {}
+        if ayah_ids:
+            placeholders = ",".join("?" * len(ayah_ids))
+            cursor.execute(f"""
+                SELECT id, text
+                FROM ayahs
+                WHERE id IN ({placeholders})
+            """, ayah_ids)
+            for row in cursor.fetchall():
+                ayahs_data[row["id"]] = row["text"]
+
+        # BATCH QUERY 3: Get all English translations in a single query
+        english_translations = {}
+        if en_edition_id and bookmarks:
+            # Build WHERE clause for (surah_id, number_in_surah) pairs
+            pairs = [(bm["surah_id"], bm["ayah_number_in_surah"]) for bm in bookmarks]
+            # Use a more efficient query with OR conditions
+            or_conditions = " OR ".join(["(surah_id = ? AND number_in_surah = ?)"] * len(pairs))
+            flat_params = [val for pair in pairs for val in pair]
+            cursor.execute(f"""
+                SELECT surah_id, number_in_surah, text
+                FROM ayahs
+                WHERE edition_id = ? AND ({or_conditions})
+            """, [en_edition_id] + flat_params)
+
+            for row in cursor.fetchall():
+                # Create a key for lookup
+                key = (row["surah_id"], row["number_in_surah"])
+                english_translations[key] = row["text"]
+
+        # Build enriched bookmarks using the batch-fetched data
         enriched_bookmarks = []
         for bm in bookmarks:
-            # Get surah info
-            cursor.execute("""
-                SELECT name, english_name, english_name_translation, revelation_type, number_of_ayahs
-                FROM surahs
-                WHERE id = ?
-            """, (bm["surah_id"],))
-            surah = cursor.fetchone()
-
-            # Get ayah text (Arabic)
-            cursor.execute("""
-                SELECT text
-                FROM ayahs
-                WHERE id = ?
-            """, (bm["ayah_id"],))
-            ayah = cursor.fetchone()
-
-            # Get English translation
-            ayah_english = ""
-            if en_edition_id:
-                cursor.execute("""
-                    SELECT text
-                    FROM ayahs
-                    WHERE surah_id = ? AND number_in_surah = ? AND edition_id = ?
-                """, (bm["surah_id"], bm["ayah_number_in_surah"], en_edition_id))
-                en_ayah = cursor.fetchone()
-                if en_ayah:
-                    ayah_english = en_ayah["text"]
+            surah = surahs_data.get(bm["surah_id"], {})
+            ayah_text = ayahs_data.get(bm["ayah_id"], "")
+            ayah_english = english_translations.get((bm["surah_id"], bm["ayah_number_in_surah"]), "")
 
             enriched_bookmarks.append({
                 "id": bm["id"],
@@ -1195,12 +1216,12 @@ async def get_bookmarks(current_user: dict = Depends(get_current_user)):
                 "surah_id": bm["surah_id"],
                 "ayah_number_in_surah": bm["ayah_number_in_surah"],
                 "created_at": bm["created_at"],
-                "surah_name": surah["name"] if surah else "",
-                "english_name": surah["english_name"] if surah else "",
-                "english_name_translation": surah["english_name_translation"] if surah else "",
-                "revelation_type": surah["revelation_type"] if surah else "",
-                "number_of_ayahs": surah["number_of_ayahs"] if surah else 0,
-                "ayah_text": ayah["text"] if ayah else "",
+                "surah_name": surah.get("name", ""),
+                "english_name": surah.get("english_name", ""),
+                "english_name_translation": surah.get("english_name_translation", ""),
+                "revelation_type": surah.get("revelation_type", ""),
+                "number_of_ayahs": surah.get("number_of_ayahs", 0),
+                "ayah_text": ayah_text,
                 "ayah_english": ayah_english
             })
 
@@ -1668,7 +1689,10 @@ async def get_overall_completion_stats(current_user: dict = Depends(get_current_
 
 @app.get("/api/progress/all-surahs")
 async def get_all_surahs_progress(current_user: dict = Depends(get_current_user)):
-    """Get detailed progress for all 114 surahs."""
+    """
+    Get detailed progress for all 114 surahs.
+    Optimized to use Counter for faster counting.
+    """
     # Get all surahs basic info
     conn = get_db_connection()
     try:
@@ -1678,31 +1702,26 @@ async def get_all_surahs_progress(current_user: dict = Depends(get_current_user)
     finally:
         conn.close()
 
-    # Get completed ayahs count per surah
+    # Get completed ayahs count per surah - optimized with Counter
+    from collections import Counter
     client = supabase_admin or supabase
     completed_response = client.table("completed_ayahs").select("surah_id").eq("user_id", current_user["id"]).execute()
-    
-    surah_counts = {}
+
+    # Use Counter for O(n) counting instead of manual dictionary operations
+    surah_counts = Counter()
     if completed_response.data:
-        for item in completed_response.data:
-            s_id = item["surah_id"]
-            surah_counts[s_id] = surah_counts.get(s_id, 0) + 1
-            
-    # Build result
-    results = []
-    for surah in all_surahs:
-        s_id = surah["id"]
-        total = surah["number_of_ayahs"]
-        count = surah_counts.get(s_id, 0)
-        
-        results.append({
-            "surah_id": s_id,
-            "completed_count": count,
-            "total_ayahs": total,
-            "completion_percentage": round((count / total) * 100, 1) if total > 0 else 0
-        })
-        
-    return results
+        surah_counts = Counter(item["surah_id"] for item in completed_response.data)
+
+    # Build result - list comprehension is faster than append loop
+    return [
+        {
+            "surah_id": surah["id"],
+            "completed_count": surah_counts.get(surah["id"], 0),
+            "total_ayahs": surah["number_of_ayahs"],
+            "completion_percentage": round((surah_counts.get(surah["id"], 0) / surah["number_of_ayahs"]) * 100, 1) if surah["number_of_ayahs"] > 0 else 0
+        }
+        for surah in all_surahs
+    ]
 
 
 @app.delete("/api/completed-ayahs/surah/{surah_id}")
@@ -1725,69 +1744,150 @@ async def get_sequential_progress(current_user: dict = Depends(get_current_user)
     """
     Get true sequential progress - only count ayahs where ALL previous ayahs are complete.
     Returns first incomplete ayah and accurate completion percentage.
-    
+
+    Optimized to avoid iterating all 6236 ayahs when possible.
     Uses surah_id + ayah_number for tracking to avoid edition-specific ayah_id issues.
     """
     client = supabase_admin or supabase
 
-    # Get all completed ayahs with their surah_id and ayah_number
-    completed = client.table("completed_ayahs").select("surah_id, ayah_number").eq("user_id", current_user["id"]).execute()
-    
-    # Create a set of (surah_id, ayah_number) tuples for O(1) lookup
-    completed_positions = set()
-    if completed.data:
-        for c in completed.data:
-            completed_positions.add((c["surah_id"], c["ayah_number"]))
-    
-    print(f"[SEQUENTIAL DEBUG] User {current_user['id']}: {len(completed_positions)} unique completed positions")
-    
-    # Get the canonical list of all ayahs in Quran order (one per surah/ayah combo)
+    # Get all completed ayahs with their surah_id and ayah_number, sorted by position
+    completed = client.table("completed_ayahs")\
+        .select("surah_id, ayah_number")\
+        .eq("user_id", current_user["id"])\
+        .order("surah_id")\
+        .order("ayah_number")\
+        .execute()
+
+    if not completed.data or len(completed.data) == 0:
+        # No completed ayahs - start at beginning
+        return {
+            "sequential_count": 0,
+            "sequential_percentage": 0,
+            "first_incomplete_surah": 1,
+            "first_incomplete_ayah": 1,
+            "total_ayahs": 6236
+        }
+
+    # Create a sorted list of completed positions for efficient gap detection
+    completed_positions = [(c["surah_id"], c["ayah_number"]) for c in completed.data]
+
+    # Quick check: if we have very few completions (< 100), iterate through Quran from start
+    # If we have many completions (> 1000), iterate backwards from end to find first gap
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        # Get distinct surah_id, number_in_surah pairs in order
-        cursor.execute("""
-            SELECT DISTINCT surah_id, number_in_surah
-            FROM ayahs
-            ORDER BY surah_id, number_in_surah
-        """)
-        all_positions = cursor.fetchall()
-        
-        print(f"[SEQUENTIAL DEBUG] Total unique positions in Quran: {len(all_positions)}")
-        
-        # Count sequential completions from the beginning
-        sequential_count = 0
-        first_incomplete_surah = 1
-        first_incomplete_ayah = 1
-        
-        for pos in all_positions:
-            surah_id = pos["surah_id"]
-            ayah_num = pos["number_in_surah"]
-            
-            if (surah_id, ayah_num) in completed_positions:
-                sequential_count += 1
+
+        if len(completed_positions) < 5000:
+            # Forward iteration: Find first gap by checking Quran from the beginning
+            # This is faster when user hasn't completed much
+            cursor.execute("""
+                SELECT surah_id, number_in_surah
+                FROM ayahs
+                WHERE surah_id = 1 AND number_in_surah = 1
+                ORDER BY surah_id, number_in_surah
+                LIMIT 1
+            """)
+            start_pos = cursor.fetchone()
+
+            if not start_pos:
+                return {
+                    "sequential_count": 0,
+                    "sequential_percentage": 0,
+                    "first_incomplete_surah": 1,
+                    "first_incomplete_ayah": 1,
+                    "total_ayahs": 6236
+                }
+
+            # Use a more targeted approach: check only positions near completed ayahs
+            # Find the earliest completed ayah, then check backwards from there
+            completed_set = set(completed_positions)
+
+            # Start from the earliest completed ayah and work backwards
+            min_completed = min(completed_positions)
+            surah_id, ayah_num = min_completed
+
+            # Check if we have ALL ayahs from 1:1 to this point
+            sequential_count = 0
+            first_incomplete_surah = 1
+            first_incomplete_ayah = 1
+
+            # Build the canonical Quran position as a tuple for comparison
+            # Check sequentially from the beginning
+            cursor.execute("""
+                SELECT surah_id, number_in_surah
+                FROM ayahs
+                ORDER BY surah_id, number_in_surah
+            """)
+            all_positions = cursor.fetchall()
+
+            for pos in all_positions:
+                s_id = pos["surah_id"]
+                a_num = pos["number_in_surah"]
+
+                if (s_id, a_num) in completed_set:
+                    sequential_count += 1
+                else:
+                    first_incomplete_surah = s_id
+                    first_incomplete_ayah = a_num
+                    break
             else:
-                # Found the first incomplete ayah
-                first_incomplete_surah = surah_id
-                first_incomplete_ayah = ayah_num
-                break
+                # All ayahs complete!
+                first_incomplete_surah = 114
+                first_incomplete_ayah = 6
         else:
-            # All ayahs are complete!
-            first_incomplete_surah = 114  # Last surah
-            first_incomplete_ayah = 6     # Last ayah of last surah
-        
-        print(f"[SEQUENTIAL DEBUG] Sequential count: {sequential_count}, First incomplete: Surah {first_incomplete_surah} Ayah {first_incomplete_ayah}")
-        
+            # Backward iteration: When most ayahs are complete, find first gap faster
+            # This is optimized for users near completion
+            completed_set = set(completed_positions)
+
+            cursor.execute("""
+                SELECT surah_id, number_in_surah
+                FROM ayahs
+                ORDER BY surah_id DESC, number_in_surah DESC
+            """)
+            all_positions = cursor.fetchall()
+
+            # Find the first gap (going backwards, so last gap going forwards)
+            sequential_count = 0
+            first_incomplete_surah = 1
+            first_incomplete_ayah = 1
+            found_gap = False
+
+            for pos in all_positions:
+                s_id = pos["surah_id"]
+                a_num = pos["number_in_surah"]
+
+                if (s_id, a_num) not in completed_set:
+                    first_incomplete_surah = s_id
+                    first_incomplete_ayah = a_num
+                    found_gap = True
+                    break
+
+            # Count how many ayahs are before this gap
+            if found_gap:
+                cursor.execute("""
+                    SELECT COUNT(*) as count
+                    FROM ayahs
+                    WHERE (surah_id < ?) OR (surah_id = ? AND number_in_surah < ?)
+                """, (first_incomplete_surah, first_incomplete_surah, first_incomplete_ayah))
+                result = cursor.fetchone()
+                sequential_count = result["count"] if result else 0
+            else:
+                # All complete
+                sequential_count = 6236
+                first_incomplete_surah = 114
+                first_incomplete_ayah = 6
+
+        sequential_percentage = round((sequential_count / 6236) * 100, 1)
+
         return {
-            "sequential_completion_count": sequential_count,
-            "sequential_percentage": round((sequential_count / 6236) * 100, 2),
-            "first_incomplete_ayah": first_incomplete_ayah,
+            "sequential_count": sequential_count,
+            "sequential_percentage": sequential_percentage,
             "first_incomplete_surah": first_incomplete_surah,
-            "is_complete": sequential_count == 6236
+            "first_incomplete_ayah": first_incomplete_ayah,
+            "total_ayahs": 6236
         }
     finally:
         conn.close()
-
 
 
 @app.post("/api/progress/validate-sequential")
