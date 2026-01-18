@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { searchQuran, getSurahs } from '../api/client';
+import { searchQuran, semanticSearchQuran, getSurahs } from '../api/client';
 import { LoadingState, EmptyState } from '../components/Spinner';
 import TextHighlighter from '../components/TextHighlighter';
 
@@ -24,12 +24,14 @@ function SearchPage() {
     const initialQuery = searchParams.get('q') || '';
     const initialLanguage = searchParams.get('language') || '';
     const initialSurahId = searchParams.get('surah_id') || '';
+    const initialMode = searchParams.get('mode') || 'keyword';
 
     // Component state
     const [query, setQuery] = useState(initialQuery);
     const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
     const [language, setLanguage] = useState(initialLanguage);
     const [surahId, setSurahId] = useState(initialSurahId);
+    const [searchMode, setSearchMode] = useState(initialMode); // 'keyword' or 'semantic'
     const [results, setResults] = useState([]);
     const [totalCount, setTotalCount] = useState(0);
     const [loading, setLoading] = useState(false);
@@ -84,8 +86,9 @@ function SearchPage() {
         if (debouncedQuery) params.q = debouncedQuery;
         if (language) params.language = language;
         if (surahId) params.surah_id = surahId;
+        if (searchMode !== 'keyword') params.mode = searchMode;
         setSearchParams(params);
-    }, [debouncedQuery, language, surahId, setSearchParams]);
+    }, [debouncedQuery, language, surahId, searchMode, setSearchParams]);
 
     // Perform search
     useEffect(() => {
@@ -103,17 +106,27 @@ function SearchPage() {
             setHasSearched(true);
 
             try {
-                const options = {
-                    limit: 50,
-                    offset: page * 50,
-                };
-                if (language) options.language = language;
-                if (surahId) options.surah_id = parseInt(surahId);
-
-                const data = await searchQuran(debouncedQuery, options);
+                let data;
+                if (searchMode === 'semantic') {
+                    // Semantic search - no pagination
+                    const options = { limit: 50 };
+                    if (language) options.language = language;
+                    if (surahId) options.surah_id = parseInt(surahId);
+                    data = await semanticSearchQuran(debouncedQuery, options);
+                    setHasMore(false); // Semantic search doesn't support pagination
+                } else {
+                    // Keyword search with pagination
+                    const options = {
+                        limit: 50,
+                        offset: page * 50,
+                    };
+                    if (language) options.language = language;
+                    if (surahId) options.surah_id = parseInt(surahId);
+                    data = await searchQuran(debouncedQuery, options);
+                    setHasMore((data.results?.length || 0) >= 50);
+                }
                 setResults(data.results || []);
                 setTotalCount(data.total_count || 0);
-                setHasMore((data.results?.length || 0) >= 50);
             } catch (err) {
                 setError(err.message || 'Search failed');
                 setResults([]);
@@ -124,7 +137,7 @@ function SearchPage() {
         };
 
         performSearch();
-    }, [debouncedQuery, language, surahId, page]);
+    }, [debouncedQuery, language, surahId, page, searchMode]);
 
     // Load more results (infinite scroll)
     const loadMore = useCallback(async () => {
@@ -189,6 +202,13 @@ function SearchPage() {
             case 'surahId':
                 setSurahId(value);
                 break;
+            case 'searchMode':
+                setSearchMode(value);
+                // Reset language to avoid 'all' in semantic mode
+                if (value === 'semantic' && language === 'all') {
+                    setLanguage('');
+                }
+                break;
         }
     };
 
@@ -228,7 +248,27 @@ function SearchPage() {
                     </div>
 
                     {/* Filters */}
-                    <div className="d-flex flex-wrap gap-3">
+                    <div className="d-flex flex-wrap gap-3 align-items-center">
+                        {/* Search Mode Toggle */}
+                        <div className="btn-group" role="group" aria-label="Search mode">
+                            <button
+                                type="button"
+                                className={`btn btn-sm ${searchMode === 'keyword' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                                onClick={() => handleFilterChange('searchMode', 'keyword')}
+                                title="Keyword search - finds exact word matches"
+                            >
+                                🔤 Keyword
+                            </button>
+                            <button
+                                type="button"
+                                className={`btn btn-sm ${searchMode === 'semantic' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                                onClick={() => handleFilterChange('searchMode', 'semantic')}
+                                title="Semantic search - finds related verses by meaning"
+                            >
+                                🧠 Semantic
+                            </button>
+                        </div>
+
                         {/* Language Filter */}
                         <div>
                             <select
@@ -240,7 +280,7 @@ function SearchPage() {
                                 <option value="">Auto-detect</option>
                                 <option value="ar">Arabic only</option>
                                 <option value="en">English only</option>
-                                <option value="all">All languages</option>
+                                {searchMode === 'keyword' && <option value="all">All languages</option>}
                             </select>
                         </div>
 
@@ -313,6 +353,23 @@ function SearchPage() {
                                         </span>
                                     </div>
                                     <div className="search-result-meta">
+                                        {/* Similarity score for semantic search */}
+                                        {result.similarity !== undefined && (
+                                            <span
+                                                className="similarity-badge"
+                                                title="Semantic similarity score"
+                                                style={{
+                                                    backgroundColor: `hsl(${Math.round(result.similarity * 120)}, 70%, 40%)`,
+                                                    color: 'white',
+                                                    padding: '2px 8px',
+                                                    borderRadius: '4px',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: '600'
+                                                }}
+                                            >
+                                                {Math.round(result.similarity * 100)}% match
+                                            </span>
+                                        )}
                                         <span className={`language-badge ${result.language === 'ar' ? 'arabic' : 'english'}`}>
                                             {result.language === 'ar' ? 'Arabic' : result.edition_name || 'English'}
                                         </span>

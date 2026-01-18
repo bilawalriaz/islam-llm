@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { LoadingState, EmptyState } from '../components/Spinner';
 
 /**
@@ -10,9 +11,11 @@ import { LoadingState, EmptyState } from '../components/Spinner';
  * - Categories - Browse by event type (Battle, Birth, Death, Milestone, etc.)
  */
 function IslamicEventsPage() {
+    const [searchParams] = useSearchParams();
     const [activeTab, setActiveTab] = useState('on-this-day');
     const [loading, setLoading] = useState(true);
     const [todayEvents, setTodayEvents] = useState([]);
+    const [showingExamples, setShowingExamples] = useState(false);
     const [categories, setCategories] = useState({});
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
@@ -26,6 +29,7 @@ function IslamicEventsPage() {
             const response = await fetch(`/api/events/on-this-day?month=${today.getMonth() + 1}&day=${today.getDate()}`);
             const data = await response.json();
             setTodayEvents(data.events || []);
+            setShowingExamples(data.showing_examples || false);
         } catch (error) {
             console.error('Error fetching on-this-day events:', error);
         } finally {
@@ -44,9 +48,20 @@ function IslamicEventsPage() {
         }
     };
 
-    // Search events
+    // Search events by category (with empty query to get all in category)
+    const fetchByCategory = async (category) => {
+        try {
+            const response = await fetch(`/api/events/search?q=&category=${category}`);
+            const data = await response.json();
+            setSearchResults(data.results || []);
+        } catch (error) {
+            console.error('Error fetching by category:', error);
+        }
+    };
+
+    // Search events by query
     const handleSearch = async () => {
-        if (!searchQuery.trim()) {
+        if (!searchQuery.trim() && !selectedCategory) {
             setSearchResults([]);
             return;
         }
@@ -68,11 +83,22 @@ function IslamicEventsPage() {
         fetchCategories();
     }, []);
 
+    // Read URL parameters on mount for shared links
     useEffect(() => {
-        if (activeTab === 'search' && searchQuery) {
+        const searchParam = searchParams.get('search');
+        if (searchParam) {
+            setSearchQuery(searchParam);
+            setActiveTab('search');
+        }
+    }, [searchParams]);
+
+    useEffect(() => {
+        if (activeTab === 'search' && selectedCategory && !searchQuery) {
+            fetchByCategory(selectedCategory);
+        } else if (activeTab === 'search' && searchQuery) {
             handleSearch();
         }
-    }, [selectedCategory]);
+    }, [selectedCategory, activeTab, searchQuery]);
 
     const getCategoryBadgeClass = (category) => {
         const badgeMap = {
@@ -101,17 +127,17 @@ function IslamicEventsPage() {
     };
 
     const renderEventCard = (event, index) => (
-        <div
+        <Link
             key={event.id || index}
+            to={`/events/${event.id}`}
             className="surah-card"
-            onClick={() => window.location.href = `/events/${event.id}`}
         >
             <div className="surah-number">
                 <span style={{ fontSize: '0.875rem' }}>{event.years_ago || '?'}</span>
             </div>
             <div className="surah-info">
                 <div className="surah-header">
-                    <h3 className="surah-name-arabic" style={{ fontSize: '1.125rem' }}>{event.title}</h3>
+                    <h3 style={{ fontSize: '1.125rem', fontWeight: '600', color: 'var(--text-primary)' }}>{event.title}</h3>
                     <div className="surah-details">
                         <span className="text-muted" style={{ fontSize: '0.875rem' }}>
                             {event.gregorian && (
@@ -164,7 +190,7 @@ function IslamicEventsPage() {
                     </div>
                 )}
             </div>
-        </div>
+        </Link>
     );
 
     if (loading) {
@@ -234,8 +260,12 @@ function IslamicEventsPage() {
                 <>
                     {todayEvents.length > 0 && (
                         <p className="text-muted" style={{ marginBottom: '16px' }}>
-                            Showing {todayEvents.length} event{todayEvents.length !== 1 ? 's' : ''} from{' '}
-                            {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+                            {showingExamples ? (
+                                <>No historical events on this day. Here are some notable events from Islamic history:</>
+                            ) : (
+                                <>Showing {todayEvents.length} event{todayEvents.length !== 1 ? 's' : ''} from{' '}
+                                {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}</>
+                            )}
                         </p>
                     )}
                     {todayEvents.length === 0 ? (
@@ -267,7 +297,10 @@ function IslamicEventsPage() {
                                     <select
                                         className="form-select"
                                         value={selectedCategory}
-                                        onChange={(e) => setSelectedCategory(e.target.value)}
+                                        onChange={(e) => {
+                                            setSelectedCategory(e.target.value);
+                                            setSearchQuery('');
+                                        }}
                                     >
                                         <option value="">All Categories</option>
                                         {Object.keys(categories).map(cat => (
@@ -284,7 +317,8 @@ function IslamicEventsPage() {
 
                     {searchResults.length > 0 && (
                         <p className="text-muted" style={{ marginBottom: '16px' }}>
-                            Found {searchResults.length} event{searchResults.length !== 1 ? 's' : ''}
+                            Showing {searchResults.length} event{searchResults.length !== 1 ? 's' : ''}
+                            {selectedCategory && ` in ${getCategoryLabel(selectedCategory)}`}
                         </p>
                     )}
 
@@ -312,9 +346,8 @@ function IslamicEventsPage() {
                                 className="surah-card"
                                 onClick={() => {
                                     setSelectedCategory(category);
-                                    setActiveTab('search');
                                     setSearchQuery('');
-                                    handleSearch();
+                                    setActiveTab('search');
                                 }}
                             >
                                 <div className="surah-number">
@@ -322,7 +355,9 @@ function IslamicEventsPage() {
                                 </div>
                                 <div className="surah-info">
                                     <div className="surah-header">
-                                        <h3 className="surah-name-arabic">{getCategoryLabel(category)}</h3>
+                                        <h3 style={{ fontSize: '1.125rem', fontWeight: '600', color: 'var(--text-primary)' }}>
+                                            {getCategoryLabel(category)}
+                                        </h3>
                                         <div className="surah-details">
                                             <span className="text-muted">Click to view events</span>
                                         </div>

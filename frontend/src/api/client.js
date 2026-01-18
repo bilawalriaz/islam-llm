@@ -246,7 +246,7 @@ export async function getEditions() {
 }
 
 /**
- * Search Quran with full-text search
+ * Search Quran with full-text search (keyword mode)
  * @param {string} query - Search query text
  * @param {Object} options - Search options
  * @param {string} options.language - Filter by language: 'ar', 'en', or 'all' (default: auto-detect)
@@ -258,6 +258,20 @@ export async function getEditions() {
 export async function searchQuran(query, options = {}) {
     const params = new URLSearchParams({ q: query, ...options });
     return fetchAPI(`/quran/search?${params}`);
+}
+
+/**
+ * Semantic search Quran using vector embeddings
+ * Finds conceptually related verses based on meaning
+ * @param {string} query - Search query text
+ * @param {Object} options - Search options
+ * @param {string} options.language - Filter by language: 'ar', 'en' (default: auto-detect)
+ * @param {number} options.surah_id - Filter to specific surah
+ * @param {number} options.limit - Max results (default: 20, max: 100)
+ */
+export async function semanticSearchQuran(query, options = {}) {
+    const params = new URLSearchParams({ q: query, ...options });
+    return fetchAPI(`/quran/search/semantic?${params}`);
 }
 
 // =============================================================================

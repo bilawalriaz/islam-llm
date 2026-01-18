@@ -15,6 +15,7 @@ import SurahDetail from './pages/SurahDetail'
 import SearchPage from './pages/SearchPage'
 import SharedProfile from './pages/SharedProfile'
 import IslamicEventsPage from './pages/IslamicEventsPage'
+import EventDetailPage from './pages/EventDetailPage'
 
 
 /**
@@ -111,7 +112,7 @@ function AppRoutes() {
                 <Route path="quran/:id" element={<SurahDetail />} />
                 <Route path="search" element={<SearchPage />} />
                 <Route path="events" element={<IslamicEventsPage />} />
-                <Route path="events/:eventId" element={<IslamicEventsPage />} />
+                <Route path="events/:eventId" element={<EventDetailPage />} />
             </Route>
 
             {/* Public share profile route - no auth required, no layout */}
