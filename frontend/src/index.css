@@ -49,6 +49,10 @@ body {
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
     color: var(--text-primary);
+    /* Safe area padding for Android/iOS status bar and notch */
+    padding-top: env(safe-area-inset-top, 0);
+    padding-left: env(safe-area-inset-left, 0);
+    padding-right: env(safe-area-inset-right, 0);
 }
 
 .container {

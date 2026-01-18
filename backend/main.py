@@ -1899,17 +1899,15 @@ async def validate_sequential_progress(current_user: dict = Depends(get_current_
     client = supabase_admin or supabase
     
     # Get all completed ayahs with their surah_id and ayah_number
-    completed = client.table("completed_ayahs").select("id, surah_id, ayah_number").eq("user_id", current_user["id"]).execute()
+    completed = client.table("completed_ayahs").select("surah_id, ayah_number").eq("user_id", current_user["id"]).execute()
     
     if not completed.data:
         return {"success": True, "sequential_count": 0}
     
     # Create a set of (surah_id, ayah_number) tuples for O(1) lookup
-    # Also create a mapping from position to completion record id
-    completed_positions = {}
+    completed_set = set()
     for c in completed.data:
-        pos = (c["surah_id"], c["ayah_number"])
-        completed_positions[pos] = c["id"]
+        completed_set.add((c["surah_id"], c["ayah_number"]))
     
     # Get the canonical list of all ayahs in Quran order
     conn = get_db_connection()
@@ -1923,27 +1921,27 @@ async def validate_sequential_progress(current_user: dict = Depends(get_current_
         all_positions = cursor.fetchall()
         
         # Find which completed positions are sequential
-        sequential_record_ids = []
+        sequential_positions = []
         
         for pos in all_positions:
             surah_id = pos["surah_id"]
             ayah_num = pos["number_in_surah"]
             position_key = (surah_id, ayah_num)
             
-            if position_key in completed_positions:
-                sequential_record_ids.append(completed_positions[position_key])
+            if position_key in completed_set:
+                sequential_positions.append(position_key)
             else:
                 # Found first incomplete - stop here
                 break
         
-        # Reset all sequential flags
+        # Reset all sequential flags for this user
         client.table("completed_ayahs").update({"is_sequential": False}).eq("user_id", current_user["id"]).execute()
         
-        # Mark sequential ones as true
-        for record_id in sequential_record_ids:
-            client.table("completed_ayahs").update({"is_sequential": True}).eq("id", record_id).execute()
+        # Mark sequential ones as true using composite key (user_id, surah_id, ayah_number)
+        for surah_id, ayah_number in sequential_positions:
+            client.table("completed_ayahs").update({"is_sequential": True}).eq("user_id", current_user["id"]).eq("surah_id", surah_id).eq("ayah_number", ayah_number).execute()
         
-        return {"success": True, "sequential_count": len(sequential_record_ids)}
+        return {"success": True, "sequential_count": len(sequential_positions)}
     finally:
         conn.close()
 
